@@ -11,7 +11,7 @@ enum class TokenType {
     Eof,        // End Of File  
     
     // Identifiers and literals
-    Identifier, // 
+    Identifier, // Identifier name
     Int,        // int literal declaration. For example 31415
     Float,      // float literal declaration. For example 3.1415
     String,     // String literal declaration. For example "Hello World!"
@@ -49,7 +49,7 @@ enum class TokenType {
     Import, // Import other files/modules
     Export, // Used to declare what attributes of the file should be exported
 
-    // Symbol
+    // Operators
     Plus,           // +
     Minus,          // -
     Star,           // *
@@ -60,8 +60,8 @@ enum class TokenType {
 
     PlusEqual,      // +=
     MinusEqual,     // -=
-    StarEqual,      // *=
-    SlashEqual,     // /=
+    TimesEqual,     // *=
+    DivideEqual,    // /=
 
     DoubleEqual,    // ==
     NotEqual,       // !=

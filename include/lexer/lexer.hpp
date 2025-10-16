@@ -19,6 +19,8 @@ public:
 private:
     inline bool eof() const noexcept    {   return m_loc.offset >= m_src.size();    }
 
+    inline bool in_bounds(size_t index) const noexcept  {   return index >= m_src.size();   }
+
     inline tb::Location loc() const noexcept    {   return m_loc;           }
     inline size_t offset() const noexcept       {   return m_loc.offset;    }
     inline size_t line() const noexcept         {   return m_loc.line;      }
@@ -31,6 +33,10 @@ private:
     void skip_trivia() noexcept;
 
     Token match_identifier() noexcept;
+    ExpectSpan<Token> match_number() noexcept;
+    ExpectSpan<Token> match_literal() noexcept;
+    ExpectSpan<Token> match_operator() noexcept;
+    TokenType match_parentheses() const noexcept;
 };
 
 } // namepsace c
