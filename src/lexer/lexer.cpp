@@ -33,7 +33,7 @@ ExpectSpan<Token> Lexer::next() {
         return Token{type, location};
     }
 
-    // TODO: Implement error logic
+    return {tb::DiagID::ERROR_invalid_character, loc()};
 }
 
 Token Lexer::match_identifier() {
@@ -56,8 +56,7 @@ Token Lexer::match_identifier() {
 }
 
 ExpectSpan<Token> Lexer::match_number() {
-    size_t start_offset = offset();
-    size_t start_column = column();
+    tb::Location start_loc = loc();
 
     do {
         advance(1);
@@ -65,57 +64,122 @@ ExpectSpan<Token> Lexer::match_number() {
 
     TokenType type = TokenType::Int;
     if (peek() == '.') {
-        if (eof()) {
-            // TODO: Implement error return logic
-        }
-
+        if (eof()) return {tb::DiagID::ERROR_incomplete_float,
+                           {std::move(start_loc), loc()}};
+        
         do {
             advance(1);
         } while (!eof() && lexer::is_digit(peek()));
         type = TokenType::Float;
     }
 
-    tb::Location start{start_offset, line(), start_column};
-    return Token{type, std::move(start), loc()};
+    return Token{type, std::move(start_loc), loc()};
 }
 
 ExpectSpan<Token> Lexer::match_literal() {
-    size_t start_offset = offset();
-    size_t start_column = column();
+    tb::Location start_loc = loc();
     
     TokenType type;
     if (peek() == '\'') {
-        if (in_bounds(offset() + 2)) { // Size of a character literal is 3 ('c'), so current pos (1) plus 2
-            // TODO: Implement error return logic
-        }
+        if (in_bounds(offset() + 2)) // Size of a character literal is 3 ('c'), so current pos (1) plus 2
+            return {tb::DiagID::ERROR_unclosed_character_literal,
+                    {std::move(start_loc), loc()}};
+        
 
         type = TokenType::Character;
         advance(2);
     } else { // peek() == '"'
         do {
             advance(1);
-            if (eof() || peek() == '\n') { // " was never closed
-                // TODO: Implement error return logic
-            }
+            if (eof() || peek() == '\n')  // " was never closed
+                return {tb::DiagID::ERROR_unclosed_string_literal,
+                        {std::move(start_loc), loc()}};
         } while (peek() != '"');
         type = TokenType::String;
     }
 
-    tb::Location start{start_offset, line(), start_column};
-    return Token{type, std::move(start), loc()};
+    return Token{type, std::move(start_loc), loc()};
 }
 
+// FIXME: Improve logic
 ExpectSpan<Token> Lexer::match_operator() {
-    size_t start_offset = offset();
-    size_t start_column = column();
-
+    tb::Location start_loc = loc();
     TokenType type = TokenType::Unknown;
-    for (const auto& kv_pair : lexer::get_operators()) {
-        auto key = kv_pair.getKey();
-        if (in_bounds(column() + key.size()) && m_src.substr(column(), key.size()) == key) {
-            
-        }
+    switch (peek()) {
+        case '-':
+            if (!eof()) {
+                if (m_src[offset() + 1] == '-') {
+                    type = TokenType::MinusMinus;
+                } else if (m_src[offset() + 1] == '=') {
+                    type = TokenType::MinusEqual;
+                } else if (m_src[offset() + 1] == '>') {
+                    type = TokenType::RArrow;
+                } else type = TokenType::Minus;
+            } else type = TokenType::Minus;
+        case '+':
+            if (!eof()) {
+                if (m_src[offset() + 1] == '+') {
+                    type = TokenType::PlusPlus;
+                } else if (m_src[offset() + 1] == '=') {
+                    type = TokenType::PlusEqual;
+                } else type = TokenType::Plus;
+            } else type = TokenType::Plus;
+        case '<':
+            if (!eof()) {
+                if (m_src[offset() + 1] == '=') {
+                    type = TokenType::LTEqual;
+                } else if (m_src[offset() + 1] == '<') {
+                    type = TokenType::LShift;
+                } else type = TokenType::LAngle;
+            } else type = TokenType::LAngle;
+        case '>':
+            if (!eof()) {
+                if (m_src[offset() + 1] == '=') {
+                    type = TokenType::MTEqual;
+                } else if (m_src[offset() + 1] == '>') {
+                    type = TokenType::RShift;
+                } else type = TokenType::RAngle;
+            } else type = TokenType::RAngle;
+        case '!':
+            if (!eof()) {
+                if (m_src[offset() + 1] == '=') {
+                    type = TokenType::NotEqual;
+                } else if (m_src[offset() + 1] == '|') {
+                    type = TokenType::BitXOR;
+                } else type = TokenType::Exclamation;
+            } else type = TokenType::Exclamation;
+        case '*':
+            if (!eof() && m_src[offset() + 1] == '=') {
+                type = TokenType::TimesEqual;
+            } else type = TokenType::Star;
+        case '/':
+            if (!eof() && m_src[offset() + 1] == '=') {
+                type = TokenType::DivideEqual;
+            } else type = TokenType::Slash;
+        case '=':
+            if (!eof() && m_src[offset() + 1] == '=') {
+                type = TokenType::DoubleEqual;
+            } else type = TokenType::Equal;
+        case '&':
+            if (!eof() && m_src[offset() + 1] == '&') {
+                type = TokenType::LogAND;
+            } else type = TokenType::Ampersand;
+        case '|':
+            if (!eof() && m_src[offset() + 1] == '|') {
+                type = TokenType::LogOR;
+            } else type = TokenType::Pipe;
+        case ':':
+            if (!eof() && m_src[offset() + 1] == ':') {
+                type = TokenType::DoubleColon;
+            } else type = TokenType::Colon;
+        case ',': type = TokenType::Comma; break;
+        case '.': type = TokenType::Dot; break;
     }
+
+    if (type == TokenType::Unknown) 
+        return {tb::DiagID::ERROR_invalid_operator,
+                {std::move(start_loc), loc()}};
+    return Token{type, std::move(start_loc), loc()};
 }
 
 TokenType Lexer::match_parentheses() const {

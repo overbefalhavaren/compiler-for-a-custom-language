@@ -1,15 +1,30 @@
 #pragma once
 
 #include <utility>
+#include <string>
+#include <system_error>
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "include/io/logging.hpp"
 
 namespace c {
+
+class Traceback; // Forward declaration
+
 namespace tb {
+
+enum DiagID {
+    ERROR_invalid_character,
+    ERROR_invalid_operator,
+    ERROR_incomplete_float,
+    ERROR_unclosed_character_literal,
+    ERROR_unclosed_string_literal,
+    ERROR_
+};
 
 enum FieldType {
     FT_Note,
@@ -55,9 +70,11 @@ private:
     LabelType m_type;
     llvm::StringRef m_msg;
     
+    llvm::StringRef m_path;
     Span m_span;
 public:
-    Label();
+    Label(tb::LabelType type, llvm::StringRef message, Span&& span)
+    : m_type(type), m_msg(std::move(message)), m_span(std::move(span)) {}
     ~Label() = default;
 
     inline LabelType type() const noexcept      {   return m_type;  }
@@ -71,7 +88,8 @@ private:
     llvm::StringRef m_msg;
     llvm::SmallVector<tb::Label, 0> m_labels;
 public:
-    Field();
+    Field(FieldType type, llvm::StringRef message) 
+    : m_type(type), m_msg(std::move(message)) {}
     ~Field() = default;
 
     inline FieldType type() const noexcept      {   return m_type;      }
@@ -81,16 +99,22 @@ public:
     inline void add_label(Label label)  {   m_labels.push_back(std::move(label));   }
 };
 
+void send(const Traceback& tb);
+llvm::Expected<std::string> format(const Traceback& tb);
+
 } // namespace tb
 
 class Traceback : llvm::ErrorInfoBase {
 private:
     log::Level m_level;
+    std::error_code m_code;
     llvm::StringRef m_msg;
     llvm::SmallVector<tb::Label, 2> m_labels;
     llvm::SmallVector<tb::Field, 0> m_fields;
 public:
-    Traceback();
+    Traceback(log::Level level, std::error_code error_code);
+    Traceback(log::Level level, std::error_code error_code, llvm::StringRef message)
+    : m_level(level), m_code(error_code), m_msg(message) {}
     ~Traceback() = default;
 
     inline log::Level level() const noexcept    {   return m_level;     }
@@ -100,6 +124,13 @@ public:
 
     inline void add_label(tb::Label label)  {   m_labels.push_back(std::move(label));   }
     inline void add_field(tb::Field field)  {   m_fields.push_back(std::move(field));   }
+
+    std::error_code convertToErrorCode() const  {   return m_code;  }
+
+    void log(llvm::raw_ostream& os) const {
+        llvm::Expected<std::string> formatted = tb::format(*this);
+        if (formatted) os << formatted.get();
+    }
 };
 
 /*
@@ -131,7 +162,7 @@ public:
     using storage_type = std::conditional_t<isRef, wrap, T>;
     using value_type = T;
     struct ErrorWithSpan {
-        std::error_code code;
+        tb::DiagID code;
         tb::Span span;
     };
 private:
@@ -146,7 +177,7 @@ public:
         new (getErrorStorage()) error_type(std::move(err));
     }
 
-    ExpectSpan(std::error_code code, tb::Span&& span) {
+    ExpectSpan(DiagID code, tb::Span&& span) {
         ExpectSpan(ErrorWithSpan{code, std::move(span)});
     }
 
