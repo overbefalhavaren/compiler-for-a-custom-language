@@ -2,8 +2,6 @@
 
 #include "llvm/ADT/StringRef.h"
 
-#include "include/io/traceback.hpp"
-
 namespace c {
 
 enum class TokenType {
@@ -85,7 +83,7 @@ enum class TokenType {
     Comma,          // ,
     Dot,            // .
 
-    RArrow,         // ->
+    Arrow,         // ->
 
     LShift, RShift, // << and >>
     LAngle, RAngle, // < and >
@@ -94,14 +92,30 @@ enum class TokenType {
     LBrack, RBrack, // [ and ]
 };
 
+constexpr llvm::StringRef strTokenType(TokenType type) {
+    switch (type) {
+        
+    }
+}
+
 struct Token {
     TokenType type;
-    tb::Span span;
+    // Span span; // TODO: Switch "lexeme" for "span" when the file stream manager is implemented
+
+    // TODO: Implement a file management system
+
+    // Temporary lexeme attribute until proper spans and a file stream 
+    // management system can be implemented so that you can get the lexeme 
+    // from a span using the file stream manager.
+    llvm::StringRef lexeme; // TODO: Deprecate this
 
     Token() = default;
-    Token(TokenType type, tb::Span&& span) : type(type), span(std::move(span)) {}
-    Token(TokenType type, tb::Location&& location) : type(type), span(location, std::move(location)) {}
-    Token(TokenType type, tb::Location&& start, tb::Location&& end) : type(type), span(std::move(start), std::move(end)) {}
+    Token(TokenType type, llvm::StringRef lexeme) : type(type), lexeme(lexeme) {}
+
+    // TODO: Implement when the file stream manager class is implemented
+    // Token(TokenType type, Span span);
+    // Token(TokenType type, Location location);
+    // Token(TokenType type, Location start, Location end);
 };
 
 } // namespace c
