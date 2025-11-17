@@ -1,0 +1,18 @@
+file(GLOB HEADERS CONFIGURE_DEPENDS
+    # "${CMAKE_SOURCE_DIR}/include/io/source_location" # Not needed until later versions
+
+    "${CMAKE_SOURCE_DIR}/include/lexer/lexer.hpp"
+    "${CMAKE_SOURCE_DIR}/include/lexer/token.hpp"
+    "${CMAKE_SOURCE_DIR}/include/lexer/utils.hpp"
+
+    "${CMAKE_SOURCE_DIR}/include/ast/ast.hpp"
+    "${CMAKE_SOURCE_DIR}/include/ast/parser.hpp"
+)
+
+add_library(compiler_lib STATIC ${HEADERS})
+target_compile_features(compiler_lib PUBLIC cxx_std_23)
+
+llvm_map_components_to_libnames(llvm_libs core)
+target_link_libraries(compiler_lib PRIVATE ${llvm_libs})
+
+

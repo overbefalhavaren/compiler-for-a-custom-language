@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+
+add_executable(compiler main.cpp)
+target_compile_features(compiler PRIVATE cxx_std_23)
+target_link_libraries(compiler PRIVATE compiler_lib)
