@@ -20,22 +20,22 @@ llvm::StringMap<llvm::Value*> namedValues;
 class Expr {
 public:
     using ExprPtr = std::unique_ptr<Expr>;
-    enum ExprType {
-        Block,
-        Variable,
-        VariableRef,
-        BinaryOp,
-        IntLiteral,
-        FloatLiteral,
-        StringLiteral,
-        CharLiteral,
-        Function,
-    };
+    // enum ExprType {
+    //     Block,
+    //     Variable,
+    //     VariableRef,
+    //     BinaryOp,
+    //     IntLiteral,
+    //     FloatLiteral,
+    //     StringLiteral,
+    //     CharLiteral,
+    //     Function,
+    // };
 
-    ~Expr() = default;
+    virtual ~Expr() = default;
     virtual llvm::Value* codegen() = 0;
-protected:
-    ExprType kind;
+// protected:
+//     ExprType kind;
 };
 
 bool isVariable(TokenType type) {
@@ -96,19 +96,20 @@ bool isBinaryOp(TokenType type) {
     }
 }
 
-class Block : Expr {
-private:
-    llvm::SmallVector<ExprPtr> stmts;
-public:
-    Block(llvm::SmallVector<ExprPtr>&& stmts) : stmts(std::move(stmts)) {}
+// TODO: Not yet needed. We don't have scopes yet
+// class Block : Expr {
+// private:
+//     llvm::SmallVector<ExprPtr> stmts;
+// public:
+//     Block(llvm::SmallVector<ExprPtr>&& stmts) : stmts(std::move(stmts)) {}
 
-    llvm::Value* codegen() {
-        llvm::outs() << "Scopes or 'block statements' are not yet supported.\n";
-        return nullptr;
-    }
-};
+//     llvm::Value* codegen() {
+//         llvm::outs() << "Scopes or 'block statements' are not yet supported.\n";
+//         return nullptr;
+//     }
+// };
 
-class Variable : Expr {
+class Variable : public Expr {
 private:
     TokenType mutability; // Const, Let, Mut, Temp or Move if it's a moved function arg
     llvm::StringRef name;
@@ -139,7 +140,7 @@ public:
     }
 };
 
-class VariableRef : Expr {
+class VariableRef : public Expr {
 private:
     llvm::StringRef name;
 public:
@@ -154,7 +155,7 @@ public:
     }
 };
 
-class BinaryOp : Expr {
+class BinaryOp : public Expr {
 private:
     TokenType Op; // The operator used
     ExprPtr LHS;
@@ -164,6 +165,9 @@ public:
         : Op(kind), LHS(std::move(lhs)), RHS(std::move(rhs)) {}
 
     llvm::Value* codegen() {
+        // FIXME: Assert false since this function is not ready yet
+        assert(false && "ast::BindaryOp not ready yet. The codegen() method needs to be properly implemented first.");
+
         // TODO: Remove this temporary return and implement the switch statement
         llvm::outs() << "Operators are not yet supported\n";
         return nullptr;
@@ -172,13 +176,16 @@ public:
         llvm::Value* R = RHS->codegen();
         if (!L || !R) return nullptr;
 
-        switch (Op) {
-            // TODO: Implement
-        }
+        // TODO: Implement
+        // switch (Op) {
+        //     // TODO: Implement
+        // }
+
+        return nullptr;
     }
 };
 
-class IntLiteral : Expr {
+class IntLiteral : public Expr {
 private:
     size_t value;
 public:
@@ -190,7 +197,7 @@ public:
     }
 };
 
-class FloatLiteral : Expr {
+class FloatLiteral : public Expr {
 private:
     float value;
 public:

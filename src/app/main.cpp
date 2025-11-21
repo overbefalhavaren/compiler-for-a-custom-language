@@ -6,9 +6,9 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
 
-// #include "include/lexer/lexer.hpp"
-// #include "include/ast/parser.hpp"
-// #include "include/ast/ast.hpp"
+#include "include/lexer/lexer.hpp"
+#include "include/ast/parser.hpp"
+#include "include/ast/ast.hpp"
 
 // using namespace c;
 

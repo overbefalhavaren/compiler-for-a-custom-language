@@ -9,10 +9,18 @@ file(GLOB HEADERS CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/include/ast/parser.hpp"
 )
 
-add_library(compiler_lib STATIC ${HEADERS})
-target_compile_features(compiler_lib PUBLIC cxx_std_23)
+# Use INTERFACE since the library is header only for now
+# add_library(compiler_lib STATIC ${HEADERS}) 
+# target_compile_features(compiler_lib PUBLIC cxx_std_23)
+
+# llvm_map_components_to_libnames(llvm_libs core)
+# target_link_libraries(compiler_lib PUBLIC ${llvm_libs})
+
+# Use INTERFACE library for now
+add_library(compiler_lib INTERFACE)
+target_include_directories(compiler_lib INTERFACE ${CMAKE_SOURCE_DIR})
+
+target_compile_features(compiler_lib INTERFACE cxx_std_23)
 
 llvm_map_components_to_libnames(llvm_libs core)
-target_link_libraries(compiler_lib PRIVATE ${llvm_libs})
-
-
+target_link_libraries(compiler_lib INTERFACE ${llvm_libs})

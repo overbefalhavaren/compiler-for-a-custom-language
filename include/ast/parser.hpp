@@ -132,7 +132,8 @@ private:
 
     template <typename ExprType>
     inline ExprPtr makeExprPtr(ExprType decl) {
-        return std::make_unique<ExprType>(std::move(decl.value()));
+        static_assert(std::is_base_of_v<ast::Expr, ExprType>, "ExprType must derive from ast::Expr.");
+        return std::make_unique<ExprType>(std::move(decl));
     }
 
     template <typename ExprType>

@@ -8,7 +8,7 @@
 
 #include "include/lexer/token.hpp"
 #include "include/lexer/utils.hpp"
-#include "include/io/source_location.hpp"
+// #include "include/io/source_location.hpp"
 
 namespace c {
 
@@ -212,7 +212,7 @@ private:
                     type = TokenType::MinusEqual;       // -=
                 } else if (peek() == '>') {
                     if (!eof()) consume(1);
-                    type == TokenType::Arrow;           // ->
+                    type = TokenType::Arrow;           // ->
                 } else type = TokenType::Minus;         // -
             } 
         }

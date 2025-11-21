@@ -93,9 +93,8 @@ enum class TokenType {
 };
 
 constexpr llvm::StringRef strTokenType(TokenType type) {
-    switch (type) {
-        
-    }
+#define convert_to_string(token_type) #token_type
+    return convert_to_string(type);
 }
 
 struct Token {

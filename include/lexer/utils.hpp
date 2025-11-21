@@ -28,7 +28,7 @@ inline bool is_ident(char c)        { return c == '_' || is_alnum(c); }
 
 // inline bool is_operator(char c);
 
-constexpr const llvm::StringMap<TokenType>& get_keywords() {
+inline const llvm::StringMap<TokenType> get_keywords() {
     return llvm::StringMap<TokenType>({
         {   "const",    TokenType::Const    },
         {   "let",      TokenType::Let      },
