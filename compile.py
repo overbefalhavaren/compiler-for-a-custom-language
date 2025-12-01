@@ -23,8 +23,9 @@ def main() -> None:
 
     build_fouler_path: str = os.path.join(dirpath, "build")
 
-    print("-- Removing old build filesb")
-    shutil.rmtree(build_fouler_path)
+    if os.path.exists(build_fouler_path):
+        print("-- Removing old build files")
+        shutil.rmtree(build_fouler_path)
 
     print("-- Creating build foulder")
     os.mkdir(build_fouler_path)

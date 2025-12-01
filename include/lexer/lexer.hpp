@@ -23,9 +23,9 @@ public:
     ~Lexer() = default;
 
     Token next() {
+        skip_trivial();
         if (eof()) 
             return Token{TokenType::Eof, ""};
-        skip_trivial();
 
         if (lexer::is_ident_start(peek())) {
             return lexIdentifier();
@@ -41,7 +41,7 @@ private:
     inline size_t offset() const { return Offset/*loc.offset()*/; }
     inline llvm::StringRef src() const { return Src; }
 
-    inline bool eof() const { return offset() >= Src.size(); }
+    inline bool eof() const { return offset() >= Src.size() - 1; }
 
     inline char peek() const { return Src[offset()]; }
     inline void consume(size_t count) { Offset++/*(void)loc.add(count)*/; }
@@ -57,7 +57,7 @@ private:
 
         do {
             consume(1);
-        } while (lexer::is_ident(peek()));
+        } while (!eof() && lexer::is_ident(peek()));
 
         llvm::StringRef lexeme = src().slice(start_offset, offset());
         
@@ -95,10 +95,12 @@ private:
 
     Token lexStringLiteral() {
         assert(false && "String literals not yet supported.");
+        return Token{TokenType::Unknown, ""};
     }
 
     Token lexCharLiteral() {
         assert(false && "Char literals not yet supported.");
+        return Token{TokenType::Unknown, ""};
     }
 
     Token lexOperatorOrPunct() {
@@ -116,44 +118,45 @@ private:
                 return Token{TokenType::Unknown, ""};
 
             // Punctuation
-            case '(': { type = TokenType::LParen; }     // (
-            case ')': { type = TokenType::RParen; }     // )
-            case '{': { type = TokenType::LBrace; }     // {
-            case '}': { type = TokenType::RBrace; }     // }
-            case '[': { type = TokenType::LBrack; }     // [
-            case ']': { type = TokenType::RBrack; }     // ]
+            case '(':  type = TokenType::LParen; break;      // (
+            case ')':  type = TokenType::RParen; break;      // )
+            case '{':  type = TokenType::LBrace; break;      // {
+            case '}':  type = TokenType::RBrace; break;      // }
+            case '[':  type = TokenType::LBrack; break;      // [
+            case ']':  type = TokenType::RBrack; break;      // ]
 
-            case '.': { type = TokenType::Dot; }        // .
-            case ',': { type = TokenType::Comma; }      // ,
+            case '.':  type = TokenType::Dot; break;         // .
+            case ',':  type = TokenType::Comma; break;       // ,
 
-            case ':': {
+            case ':': 
                 if (peek() == ':') {
                     if (!eof()) consume(1);
                     type = TokenType::DoubleColon;      // ::
                 } else type = TokenType::Colon;         // :
-            }
+                break;
 
             // Operators
-            case '=': {
+            case '=': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
                     type = TokenType::DoubleEqual;      // ==
                 } else type = TokenType::Equal;         // =
-            }
+                break;
+
             // Logical
-            case '&': {
+            case '&': 
                 if (peek() == '&') {
                     if (!eof()) consume(1);
                     type = TokenType::LogAND;           // &&
                 } else type = TokenType::Ampersand;     // &
-            }
-            case '|': {
+                break;
+            case '|': 
                 if (peek() == '|') {
                     if (!eof()) consume(1);
                     type = TokenType::LogOR;            // ||
                 } else type = TokenType::Pipe;          // |
-            }
-            case '!': {
+                break;
+            case '!': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
                     type = TokenType::NotEqual;         // !=
@@ -161,9 +164,10 @@ private:
                     if (!eof()) consume(1);
                     type = TokenType::BitXOR;           // !|
                 } else type = TokenType::Exclamation;   // !
-            }
+                break;
+
             // Bit shift and logical
-            case '<': {
+            case '<': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
                     type = TokenType::LTEqual;          // <=
@@ -171,8 +175,8 @@ private:
                     if (!eof()) consume(1);
                     type = TokenType::LShift;           // <<
                 } else type = TokenType::LAngle;        // <
-            }
-            case '>': {
+                break;
+            case '>': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
                     type = TokenType::MTEqual;          // >=
@@ -180,21 +184,22 @@ private:
                     if (!eof()) consume(1);
                     type = TokenType::RShift;           // >>
                 } else type = TokenType::RAngle;        // >
-            }
+                break;
+
             // Compund assignment and mathematical
-            case '*': { // And pointer
+            case '*':  // And pointer
                 if (peek() == '=') {
                     if (!eof()) consume(1);
                     type = TokenType::TimesEqual;       // *=
                 } else type = TokenType::Star;          // *
-            }
-            case '/': {
+                break;
+            case '/': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
                     type = TokenType::DivideEqual;      // /=
                 } else type = TokenType::Slash;         // /
-            }
-            case '+': {
+                break;
+            case '+': 
                 if (peek() == '+') {
                     if (!eof()) consume(1);
                     type = TokenType::PlusPlus;         // ++
@@ -202,8 +207,9 @@ private:
                     if (!eof()) consume(1);
                     type = TokenType::PlusEqual;        // +=
                 } else type = TokenType::Plus;          // +
-            }
-            case '-': { // And arrow
+                break;
+
+            case '-':  // And arrow
                 if (peek() == '-') {
                     if (!eof()) consume(1);
                     type = TokenType::MinusMinus;       // --
@@ -214,7 +220,7 @@ private:
                     if (!eof()) consume(1);
                     type = TokenType::Arrow;           // ->
                 } else type = TokenType::Minus;         // -
-            } 
+                break;
         }
 
         return Token{type, src().slice(start_offset, offset())};

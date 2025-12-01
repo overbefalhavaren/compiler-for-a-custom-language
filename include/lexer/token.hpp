@@ -92,9 +92,101 @@ enum class TokenType {
     LBrack, RBrack, // [ and ]
 };
 
-constexpr llvm::StringRef strTokenType(TokenType type) {
-#define convert_to_string(token_type) #token_type
-    return convert_to_string(type);
+llvm::StringRef strTokenType(TokenType type) {
+    switch (type) {
+        case TokenType::Unknown: return "Unknown";
+        case TokenType::Eof: return "Eof";
+
+        case TokenType::Identifier: return "Identifier";
+        case TokenType::Int: return "Int";
+        case TokenType::Float: return "Float";
+        case TokenType::String: return "String";
+        case TokenType::Character: return "Character";
+
+        case TokenType::Const: return "Const";
+        case TokenType::Let: return "Let";
+        case TokenType::Mut: return "Mut";
+        case TokenType::Temp: return "Temp";
+        case TokenType::Type: return "Type";
+        case TokenType::Move: return "Move";
+        case TokenType::Self: return "Self";
+        
+        case TokenType::End: return "End";
+
+        case TokenType::If: return "If";
+        case TokenType::Elif: return "Elif";
+        case TokenType::Else: return "Else";
+        case TokenType::Match: return "Match";
+        case TokenType::Case: return "Case";
+
+        case TokenType::While: return "While";
+        case TokenType::For: return "For";
+        case TokenType::Break: return "Break";
+
+        case TokenType::Fn: return "Fn";
+        case TokenType::Return: return "Return";
+
+        case TokenType::Enum: return "Enum";
+        case TokenType::Struct: return "Struct";
+        case TokenType::Impl: return "Impl";
+        case TokenType::Trait: return "Trait";
+
+        case TokenType::Import: return "Import";
+        case TokenType::Export: return "Export";
+
+        case TokenType::Plus: return "Plus";
+        case TokenType::Minus: return "Minus";
+        case TokenType::Star: return "Star";
+        case TokenType::Slash: return "Slash";
+
+        case TokenType::PlusPlus: return "PlusPlus";
+        case TokenType::MinusMinus: return "MinusMinus";
+
+        case TokenType::PlusEqual: return "PlusEqual";
+        case TokenType::MinusEqual: return "MinusEqual";
+        case TokenType::TimesEqual: return "TimesEqual";
+        case TokenType::DivideEqual: return "DivideEqual";
+
+        case TokenType::DoubleEqual: return "DoubleEqual";
+        case TokenType::NotEqual: return "NotEqual";
+        case TokenType::MTEqual: return "MTEqual";
+        case TokenType::LTEqual: return "LTEqual";
+
+        case TokenType::LogAND: return "LogAND";
+        case TokenType::LogOR: return "LogOR";
+        case TokenType::BitXOR: return "BitXOR";
+
+        case TokenType::Exclamation: return "Exclamation";
+        case TokenType::Equal: return "Equal";
+        case TokenType::Ampersand: return "Ampersand";
+        case TokenType::Pipe: return "Pipe";
+
+        case TokenType::Colon: return "Colon";
+        case TokenType::DoubleColon: return "DoubleColon";
+        case TokenType::Comma: return "Comma";
+        case TokenType::Dot: return "Dot";
+
+        case TokenType::Arrow: return "Arrow";
+
+        case TokenType::LShift: return "LShift";
+        case TokenType::RShift: return "RShift";
+
+        case TokenType::LAngle: return "LAngle";
+        case TokenType::RAngle: return "RAngle";
+
+        case TokenType::LParen: return "LParen";
+        case TokenType::RParen: return "RParen";
+
+        case TokenType::LBrace: return "LBrace";
+        case TokenType::RBrace: return "RBrace";
+
+        case TokenType::LBrack: return "LBrack";
+        case TokenType::RBrack: return "RBrack";
+
+        default:
+            assert(false && "Unknown token can't be converted to string.");
+            return ""; // To avoid compiler warning
+    }
 }
 
 struct Token {
@@ -115,6 +207,53 @@ struct Token {
     // Token(TokenType type, Span span);
     // Token(TokenType type, Location location);
     // Token(TokenType type, Location start, Location end);
+
+    inline bool is(TokenType T) const { return type == T; }
+    
+    inline bool isOperator() const {
+        switch (type) {
+            case TokenType::Plus:
+            case TokenType::Minus:
+            case TokenType::Star:
+            case TokenType::Slash:
+
+            case TokenType::PlusPlus:
+            case TokenType::MinusMinus:
+
+            case TokenType::PlusEqual:
+            case TokenType::MinusEqual:
+            case TokenType::TimesEqual:
+            case TokenType::DivideEqual:
+
+            case TokenType::DoubleEqual:
+            case TokenType::NotEqual:
+            case TokenType::MTEqual:
+            case TokenType::LTEqual:
+
+            case TokenType::RAngle: // More than
+            case TokenType::LAngle: // Less than
+
+            case TokenType::LogAND:
+            case TokenType::LogOR:
+            case TokenType::BitXOR:
+
+            case TokenType::Exclamation:
+            case TokenType::Equal:
+            case TokenType::Ampersand:
+            case TokenType::Pipe:
+
+            case TokenType::LShift:
+            case TokenType::RShift:
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    std::string str() const {
+        return std::string() + "Token{type=TokenType::" + strTokenType(type).str() + ", lexeme=\"" + lexeme.str() + "\"}";
+    }
 };
 
 } // namespace c

@@ -34,6 +34,8 @@ public:
 
     virtual ~Expr() = default;
     virtual llvm::Value* codegen() = 0;
+
+    virtual constexpr std::string str() const = 0;
 // protected:
 //     ExprType kind;
 };
@@ -115,8 +117,8 @@ private:
     llvm::StringRef name;
     std::unique_ptr<Expr> value;
 public:
-    Variable(TokenType kind, llvm::StringRef name) : mutability(kind), name(name) {}
-    Variable(TokenType kind, llvm::StringRef name, ExprPtr value)
+    // Variable(TokenType kind, llvm::StringRef name) : mutability(kind), name(name) {}
+    Variable(TokenType kind, llvm::StringRef name, ExprPtr&& value)
         : mutability(kind), name(std::move(name)), value(std::move(value)) {}
 
     llvm::Value* codegen() {
@@ -138,6 +140,8 @@ public:
         namedValues.try_emplace(name.str(), alloca);
         return alloca;
     }
+
+    constexpr std::string str() const { return "Variable"; }
 };
 
 class VariableRef : public Expr {
@@ -153,6 +157,8 @@ public:
         llvm::outs() << "Use of undeclared variable: '" << name << "'\n";
         return nullptr;
     }
+
+    constexpr std::string str() const { return "VariableRef"; }
 };
 
 class BinaryOp : public Expr {
@@ -161,7 +167,7 @@ private:
     ExprPtr LHS;
     ExprPtr RHS;
 public:
-    BinaryOp(TokenType kind, ExprPtr lhs, ExprPtr rhs) 
+    BinaryOp(TokenType kind, ExprPtr&& lhs, ExprPtr&& rhs) 
         : Op(kind), LHS(std::move(lhs)), RHS(std::move(rhs)) {}
 
     llvm::Value* codegen() {
@@ -183,6 +189,8 @@ public:
 
         return nullptr;
     }
+
+    constexpr std::string str() const { return "BinaryOp"; }
 };
 
 class IntLiteral : public Expr {
@@ -195,6 +203,8 @@ public:
         llvm::outs() << "Int literals are not yet supported";
         return nullptr;
     }
+
+    constexpr std::string str() const { return "IntLiteral"; }
 };
 
 class FloatLiteral : public Expr {
@@ -206,6 +216,8 @@ public:
     llvm::Value* codegen() {
         return llvm::ConstantFP::get(*context, llvm::APFloat(value));
     }
+
+    constexpr std::string str() const { return "FloatLiteral"; }
 };
 
 // TODO: Functions not yet supported

@@ -1,3 +1,5 @@
 .vscode/
-build/
 deprecated/
+build/
+bin/
+lib/

@@ -10,6 +10,7 @@
 
 namespace c {
 
+// TODO: Remake and restructure the Parser class
 class Parser {
 public:
     // using DeclPtr = std::unique_ptr<ast::Decl>; // TODO: Will eventually be reinstated when more advanced functionality is added
@@ -18,49 +19,74 @@ private:
     Lexer lexer;
     std::unique_ptr<Token> tok;
 public:
-    explicit Parser(Lexer&& lexer) : lexer(std::move(lexer)), tok(std::make_unique<Token>(lexer.next())) {}
+    explicit Parser(Lexer&& lexer) : lexer(std::move(lexer)), tok(std::make_unique<Token>()) {
+        (void)nextToken();
+    }
     ~Parser() = default;
 
+    inline bool eof() const { return tok->is(TokenType::Eof); }
+
     std::optional<ExprPtr> next() {
+        llvm::outs() << "CURRENT: " << llvm::StringRef(peekToken().str()) << "\n";
+
+        std::unique_ptr<ast::Expr> lhs; // 
         switch (peekToken().type) {
             case TokenType::Const:
             case TokenType::Let:
             case TokenType::Mut:
                 return makeOptExprPtr<ast::Variable>(parseVariable());
-            case TokenType::Identifier: {
-                // FIXME:
-                // Right now binary operators will not work if RHS or LHS is a literal,
-                // a call or an attribute access. Fix in a future update
-                ExprPtr lhs = makeExprPtr<ast::VariableRef>(peekToken().lexeme);
-                if (!ast::isBinaryOp(nextToken().type))
-                    return lhs;
 
-                TokenType op = peekToken().type;
-                if (nextToken().type == TokenType::Identifier) {
-                    ExprPtr rhs = makeExprPtr<ast::VariableRef>(peekToken().lexeme);
-                    return makeExprPtr<ast::BinaryOp>(ast::BinaryOp(
-                        op, std::move(lhs), std::move(rhs)
-                    ));
-                }
-
-                llvm::outs() << "Expected a binary operator.\n";
-                return std::nullopt;
+            // All folowing cases allow for use of a binary operator.
+            case TokenType::Identifier:
+                lhs = makeExprPtr<ast::VariableRef>(peekToken().lexeme);
+                break;
+            case TokenType::Int: {
+                int64_t value;
+                // Should not give error since the lexer has already validated it
+                (void)peekToken().lexeme.getAsInteger(10, value);
+                lhs = makeExprPtr<ast::IntLiteral>(std::move(value));
+                break;
             }
-            case TokenType::Int:
-                return makeExprPtr<ast::IntLiteral>(parseInt(peekToken().lexeme));
-            case TokenType::Float:
-                return makeExprPtr<ast::FloatLiteral>(parseFloat(peekToken().lexeme));
+            case TokenType::Float: {
+                double value;
+                // Should not give error since the lexer has already validated it
 
+                // NOTE:
+                // When adding support for expressions like "1e-5" this will
+                // probably have to be updated
+                (void)peekToken().lexeme.getAsDouble(value);
+                lhs = makeExprPtr<ast::FloatLiteral>(std::move(value));
+                break;
+            }
+
+            case TokenType::Eof:
+                return std::nullopt;
+            
             // Works as the default case by catching all error tokens. Does not emit 
             // any errors since they are already emitted by the lexer.
             case TokenType::Unknown:
                 return std::nullopt;
 
-            // TODO: Temporary default to catch any tokens that are defined but unsupported
+            // NOTE: Temporary default to catch any tokens that are defined but unsupported
             default:
-                llvm::outs() << "Unsupported token type: '" << strTokenType(peekToken().type) << "'\n";
-                return std::nullopt;
+                assert(false && "Unsupported token type.");
+                // llvm::outs() << "Unsupported token type: '" << strTokenType(peekToken().type) << "'\n";
+                // return std::nullopt;
         }
+
+        if (!nextToken().isOperator()) {
+            return lhs;
+        }
+
+        TokenType op = peekToken().type;
+
+        (void)nextToken();
+        std::optional<std::unique_ptr<ast::Expr>> rhs = next();
+        if (!rhs.has_value())
+            return std::nullopt;
+        
+        auto expr = ast::BinaryOp(op, std::move(lhs), std::move(rhs.value()));
+        return makeExprPtr<ast::BinaryOp>(std::move(expr));
     }
 
     // TODO: Top level declaration not yet supported
@@ -79,33 +105,33 @@ public:
     //     }
     // }
 
-    bool skipUntil(TokenType type, bool consume_match = true) {
-        do {
-            (void)nextToken();
-        } while (!checkToken(type) && !checkToken(TokenType::Eof));
-        if (checkToken(TokenType::Eof))
-            return false;
-        if (consume_match)
-            (void)nextToken();
-        return true;
-    }
+    // bool skipUntil(TokenType type, bool consume_match = true) {
+    //     do {
+    //         (void)nextToken();
+    //     } while (!checkToken(type) && !checkToken(TokenType::Eof));
+    //     if (checkToken(TokenType::Eof))
+    //         return false;
+    //     if (consume_match)
+    //         (void)nextToken();
+    //     return true;
+    // }
 
-    bool skipUntil(llvm::ArrayRef<TokenType> types, bool consume_match) {
-        bool is_found = false;
-        do {
-            (void)nextToken();
-            for (size_t i = 0; i < types.size(); i++)
-                if (checkToken(types[i])) {
-                    is_found = true;
-                    break;
-                }
-        } while (!is_found && !checkToken(TokenType::Eof));
-        if (checkToken(TokenType::Eof))
-            return false;
-        if (consume_match)
-            (void)nextToken();
-        return true;
-    }
+    // bool skipUntil(llvm::ArrayRef<TokenType> types, bool consume_match) {
+    //     bool is_found = false;
+    //     do {
+    //         (void)nextToken();
+    //         for (size_t i = 0; i < types.size(); i++)
+    //             if (checkToken(types[i])) {
+    //                 is_found = true;
+    //                 break;
+    //             }
+    //     } while (!is_found && !checkToken(TokenType::Eof));
+    //     if (checkToken(TokenType::Eof))
+    //         return false;
+    //     if (consume_match)
+    //         (void)nextToken();
+    //     return true;
+    // }
     
 private:
     // Return an immutable reference of the current token.
@@ -114,16 +140,13 @@ private:
     // Advance to the next token and return an immutable reference to it.
     const Token& nextToken() {
         *tok = lexer.next();
-    }
-
-    // Return bool if the current token is of the specified type.
-    inline bool checkToken(TokenType type) {
-        return peekToken().type == type;
+        llvm::outs() << tok->str() << "\n";
+        return *tok;
     }
 
     // Check if the current token is of a certain type and advance if true.
     inline bool consumeToken(TokenType type) {
-        if (checkToken(type)) {
+        if (peekToken().is(type)) {
             (void)nextToken(); 
             return true;
         }
@@ -139,25 +162,19 @@ private:
     template <typename ExprType>
     inline std::optional<ExprPtr> makeOptExprPtr(std::optional<ExprType> decl) {
         if (decl.has_value())
-            return std::make_unique<ExprType>(std::move(decl.value()));
+            return makeExprPtr<ExprType>(std::move(decl.value()));
         return std::nullopt;
     }
 
-    size_t parseInt(llvm::StringRef lexeme) {
-
-    }
-
-    float parseFloat(llvm::StringRef lexeme) {
-
-    }
-
     std::optional<ast::Variable> parseVariable() {
-        TokenType kind = peekToken().type; // The leading token of a variable
+        TokenType kind = peekToken().type; // The leading token of a variable; const, let mut, etc
         (void)nextToken();
 
         llvm::StringRef name = peekToken().lexeme; // TODO: Deprecate "lexeme"
         if (!consumeToken(TokenType::Identifier)) {
-            llvm::outs() << "Expected Identifier\n"; 
+            llvm::outs() << "Expected Identifier: " 
+                         << strTokenType(peekToken().type) << ": " 
+                         << peekToken().lexeme << "\n";
             return std::nullopt;
         }
 
@@ -168,12 +185,17 @@ private:
 
         // TODO: Match type here
 
+        std::unique_ptr<ast::Expr> value;
         if (consumeToken(TokenType::Equal)) {
-            // FIXME: Implement parsing of the value of the variable
-
-            // return ast::Variable();
+            std::optional<std::unique_ptr<ast::Expr>> maybe_value = next();
+            if (!maybe_value.has_value())
+                return std::nullopt;
+            value = std::move(maybe_value.value());
+            llvm::outs() << "1\n";
+            (void)nextToken();
+            llvm::outs() << "2\n";
         }
-        return ast::Variable(kind, name);
+        return ast::Variable(kind, name, std::move(value));
     }
 
     // TODO: Functions are not yet supported

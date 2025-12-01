@@ -7,13 +7,13 @@
 class Base {
 public:
     virtual ~Base() = default;
-    virtual void print() = 0;
+    virtual void print() const = 0;
 };
 
 class Child1 : public Base {
 public:
     Child1() = default;
-    void print() {
+    void print() const {
         std::cout << "Child1\n";
     }
 };
@@ -21,7 +21,7 @@ public:
 class Child2 : public Base {
 public:
     Child2() = default;
-    void print() {
+    void print() const {
         std::cout << "Child2\n";
     }
 };
@@ -30,7 +30,7 @@ class Other {
 public:
     Other() = default;
     ~Other() = default;
-    void print() {
+    void print() const {
         std::cout << "Other\n";
     }
 };
