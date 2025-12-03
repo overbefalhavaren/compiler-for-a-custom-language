@@ -65,7 +65,8 @@ int main(int argc, const char* argv[]) {
     ast::builder = std::make_unique<llvm::IRBuilder<>>(*ast::context);
 
     llvm::SmallVector<Parser::ExprPtr, 0> exprs(0);
-    for (std::optional<Parser::ExprPtr> expr = parser.next(); !parser.eof(); expr = parser.next()) {
+    for (std::optional<Parser::ExprPtr> expr; !parser.eof();) {
+        expr = parser.next();
         if (!expr.has_value())
             assert(false && "expr didn't have a value.");
 

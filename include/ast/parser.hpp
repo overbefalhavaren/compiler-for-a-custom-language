@@ -27,14 +27,14 @@ public:
     inline bool eof() const { return tok->is(TokenType::Eof); }
 
     std::optional<ExprPtr> next() {
-        llvm::outs() << "CURRENT: " << llvm::StringRef(peekToken().str()) << "\n";
+        // llvm::outs() << "CURRENT: " << llvm::StringRef(peekToken().str()) << "\n";
 
         std::unique_ptr<ast::Expr> lhs; // 
         switch (peekToken().type) {
             case TokenType::Const:
             case TokenType::Let:
-            case TokenType::Mut:
-                return makeOptExprPtr<ast::Variable>(parseVariable());
+            case TokenType::Mut: 
+                return parseVariable();
 
             // All folowing cases allow for use of a binary operator.
             case TokenType::Identifier:
@@ -69,14 +69,14 @@ public:
 
             // NOTE: Temporary default to catch any tokens that are defined but unsupported
             default:
+                llvm::outs() << "Unsupported token type: '" << peekToken().str() << "'\n";
                 assert(false && "Unsupported token type.");
                 // llvm::outs() << "Unsupported token type: '" << strTokenType(peekToken().type) << "'\n";
                 // return std::nullopt;
         }
 
-        if (!nextToken().isOperator()) {
+        if (!nextToken().isOperator()) 
             return lhs;
-        }
 
         TokenType op = peekToken().type;
 
@@ -140,7 +140,6 @@ private:
     // Advance to the next token and return an immutable reference to it.
     const Token& nextToken() {
         *tok = lexer.next();
-        llvm::outs() << tok->str() << "\n";
         return *tok;
     }
 
@@ -166,36 +165,29 @@ private:
         return std::nullopt;
     }
 
-    std::optional<ast::Variable> parseVariable() {
-        TokenType kind = peekToken().type; // The leading token of a variable; const, let mut, etc
-        (void)nextToken();
-
-        llvm::StringRef name = peekToken().lexeme; // TODO: Deprecate "lexeme"
-        if (!consumeToken(TokenType::Identifier)) {
-            llvm::outs() << "Expected Identifier: " 
-                         << strTokenType(peekToken().type) << ": " 
-                         << peekToken().lexeme << "\n";
+    std::optional<std::unique_ptr<ast::Expr>> parseVariable() {
+        TokenType mutability = peekToken().type;
+        
+        llvm::StringRef name = nextToken().lexeme;
+        if (!peekToken().is(TokenType::Identifier)) {
+            llvm::outs() << "Expected Identifier: " << peekToken().str() << "\n";
             return std::nullopt;
         }
 
         // TODO: Implement type system and matching
-        // if (consumeToken(TokenType::Colon)) {
-            
-        // }
-
         // TODO: Match type here
 
-        std::unique_ptr<ast::Expr> value;
-        if (consumeToken(TokenType::Equal)) {
-            std::optional<std::unique_ptr<ast::Expr>> maybe_value = next();
-            if (!maybe_value.has_value())
-                return std::nullopt;
-            value = std::move(maybe_value.value());
-            llvm::outs() << "1\n";
+        std::unique_ptr<ast::Expr> value = nullptr;
+        if (nextToken().is(TokenType::Equal)) {
             (void)nextToken();
-            llvm::outs() << "2\n";
+            std::optional<std::unique_ptr<ast::Expr>> v = next();
+            if (!v.has_value())
+                return std::nullopt;
+            value = std::move(v.value());
         }
-        return ast::Variable(kind, name, std::move(value));
+
+        ast::Variable result(mutability, name, std::move(value));
+        return makeExprPtr<ast::Variable>(std::move(result));
     }
 
     // TODO: Functions are not yet supported

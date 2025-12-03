@@ -3,3 +3,7 @@ deprecated/
 build/
 bin/
 lib/
+
+*.exe
+
+CompileMe.txt
