@@ -70,23 +70,16 @@ int main(int argc, const char* argv[]) {
         if (!expr.has_value())
             assert(false && "expr didn't have a value.");
 
-        llvm::outs() << "Expr: " << expr.value()->str() << "\n\n";
+        // llvm::outs() << "Expr: " << expr.value()->str() << "\n\n";
         exprs.push_back(std::move(expr.value()));
         if (exprs.size() == exprs.capacity())
             exprs.reserve(10); 
     }
 
-    llvm::outs() << "EXPRESSIONS: " << exprs.size() << "\n";
-
     if (exprs.size() < exprs.capacity())
         exprs.resize(exprs.size());
 
     assert(exprs.size() && "No expressions."); 
-
-    // for (const std::unique_ptr<ast::Expr>& e : exprs) {
-    //     llvm::outs() << "Expr:\n";
-    //     llvm::outs() << e->str() << "\n";
-    // }
     
     llvm::SmallString<0> path({srcPath, ".exe"});
     
@@ -96,10 +89,29 @@ int main(int argc, const char* argv[]) {
         llvm::outs() << "Could not open file: '" << path << "'.\n";
         return 1;
     }
+
+    llvm::FunctionType* funcType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*ast::context), false
+    );
+
+    llvm::Function* mainFunc = llvm::Function::Create(
+        funcType, llvm::Function::ExternalLinkage, "main", ast::module_.get()
+    );
+
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(*ast::context, "entry", mainFunc);
+    ast::builder->SetInsertPoint(entry);
+
+    for (const std::unique_ptr<ast::Expr>& expr : exprs) {
+        llvm::Value* result = expr->codegen();
+        if (!result) // nullptr return means error
+            return 1;
+    }
+
+    ast::builder->CreateRetVoid();
     
     ast::module_->print(out, nullptr);
 
-    llvm::outs() << "Successfully compiled.\n";
+    // llvm::outs() << "Congratulations! It didn't crash.\n";
 #endif
     
     return 0;

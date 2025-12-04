@@ -200,7 +200,7 @@ public:
     IntLiteral(size_t value) : value(std::move(value)) {}
 
     llvm::Value* codegen() {
-        llvm::outs() << "Int literals are not yet supported";
+        assert(false && "Int literals are not yet supported");
         return nullptr;
     }
 
