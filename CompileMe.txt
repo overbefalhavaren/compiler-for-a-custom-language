@@ -1,2 +1,0 @@
-test
-let test = 10
