@@ -131,7 +131,7 @@ private:
             case ':': 
                 if (peek() == ':') {
                     if (!eof()) consume(1);
-                    type = TokenType::DoubleColon;      // ::
+                    type = TokenType::ColonColon;       // ::
                 } else type = TokenType::Colon;         // :
                 break;
 
@@ -139,7 +139,7 @@ private:
             case '=': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
-                    type = TokenType::DoubleEqual;      // ==
+                    type = TokenType::EqualEqual;       // ==
                 } else type = TokenType::Equal;         // =
                 break;
 
@@ -159,7 +159,7 @@ private:
             case '!': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
-                    type = TokenType::NotEqual;         // !=
+                    type = TokenType::ExclEqual;        // !=
                 } else if (peek() == '|') {
                     if (!eof()) consume(1);
                     type = TokenType::BitXOR;           // !|
@@ -170,33 +170,33 @@ private:
             case '<': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
-                    type = TokenType::LTEqual;          // <=
+                    type = TokenType::LessEqual;        // <=
                 } else if (peek() == '<') {
                     if (!eof()) consume(1);
                     type = TokenType::LShift;           // <<
-                } else type = TokenType::LAngle;        // <
+                } else type = TokenType::Less;          // <
                 break;
             case '>': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
-                    type = TokenType::MTEqual;          // >=
+                    type = TokenType::MoreEqual;        // >=
                 } else if (peek() == '>') {
                     if (!eof()) consume(1);
                     type = TokenType::RShift;           // >>
-                } else type = TokenType::RAngle;        // >
+                } else type = TokenType::More;          // >
                 break;
 
             // Compund assignment and mathematical
             case '*':  // And pointer
                 if (peek() == '=') {
                     if (!eof()) consume(1);
-                    type = TokenType::TimesEqual;       // *=
+                    type = TokenType::StarEqual;        // *=
                 } else type = TokenType::Star;          // *
                 break;
             case '/': 
                 if (peek() == '=') {
                     if (!eof()) consume(1);
-                    type = TokenType::DivideEqual;      // /=
+                    type = TokenType::SlashEqual;       // /=
                 } else type = TokenType::Slash;         // /
                 break;
             case '+': 

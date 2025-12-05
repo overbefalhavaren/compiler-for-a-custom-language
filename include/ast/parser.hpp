@@ -40,13 +40,13 @@ public:
             case TokenType::Identifier:
                 lhs = makeExprPtr<ast::VariableRef>(peekToken().lexeme);
                 break;
-            case TokenType::Int: {
-                int64_t value;
-                // Should not give error since the lexer has already validated it
-                (void)peekToken().lexeme.getAsInteger(10, value);
-                lhs = makeExprPtr<ast::IntLiteral>(std::move(value));
-                break;
-            }
+            case TokenType::Int: // { // NOTE: Temporarily make Int and Float both be Float
+            //     int64_t value;
+            //     // Should not give error since the lexer has already validated it
+            //     (void)peekToken().lexeme.getAsInteger(10, value);
+            //     lhs = makeExprPtr<ast::IntLiteral>(std::move(value));
+            //     break;
+            // }
             case TokenType::Float: {
                 double value;
                 // Should not give error since the lexer has already validated it

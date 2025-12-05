@@ -40,6 +40,7 @@ public:
 //     ExprType kind;
 };
 
+/*
 bool isVariable(TokenType type) {
     switch (type) {
         case TokenType::Const:
@@ -97,6 +98,7 @@ bool isBinaryOp(TokenType type) {
             return false;
     }
 }
+*/
 
 // TODO: Not yet needed. We don't have scopes yet
 // class Block : Expr {
@@ -127,7 +129,7 @@ public:
             return nullptr;
         }
 
-        llvm::Type* var_type = llvm::Type::getFloatTy(*context);
+        llvm::Type* var_type = llvm::Type::getDoubleTy(*context);
         llvm::AllocaInst* alloca = builder->CreateAlloca(var_type, nullptr, name);
         if (value) {
             llvm::Value* v = value->codegen();
@@ -135,7 +137,7 @@ public:
 
             builder->CreateStore(v, alloca);
         } else
-            builder->CreateStore(llvm::ConstantFP::get(llvm::Type::getFloatTy(*context), 0.0), alloca);
+            builder->CreateStore(llvm::ConstantFP::get(llvm::Type::getDoubleTy(*context), 0.0), alloca);
 
         namedValues.try_emplace(name.str(), alloca);
         return alloca;
@@ -161,38 +163,11 @@ public:
     constexpr std::string str() const { return "VariableRef"; }
 };
 
-class BinaryOp : public Expr {
-private:
-    TokenType Op; // The operator used
-    ExprPtr LHS;
-    ExprPtr RHS;
-public:
-    BinaryOp(TokenType kind, ExprPtr&& lhs, ExprPtr&& rhs) 
-        : Op(kind), LHS(std::move(lhs)), RHS(std::move(rhs)) {}
+// NOTE: 
+// We're going to temporarily treat IntLiterals the same 
+// as floats until types are introduced
 
-    llvm::Value* codegen() {
-        // FIXME: Assert false since this function is not ready yet
-        assert(false && "ast::BindaryOp not ready yet. The codegen() method needs to be properly implemented first.");
-
-        // TODO: Remove this temporary return and implement the switch statement
-        llvm::outs() << "Operators are not yet supported\n";
-        return nullptr;
-
-        llvm::Value* L = LHS->codegen();
-        llvm::Value* R = RHS->codegen();
-        if (!L || !R) return nullptr;
-
-        // TODO: Implement
-        // switch (Op) {
-        //     // TODO: Implement
-        // }
-
-        return nullptr;
-    }
-
-    constexpr std::string str() const { return "BinaryOp"; }
-};
-
+/*
 class IntLiteral : public Expr {
 private:
     size_t value;
@@ -206,18 +181,99 @@ public:
 
     constexpr std::string str() const { return "IntLiteral"; }
 };
+*/
 
 class FloatLiteral : public Expr {
 private:
-    float value;
+    double value;
 public:
-    FloatLiteral(float value) : value(std::move(value)) {}
+    FloatLiteral(double value) : value(std::move(value)) {}
 
     llvm::Value* codegen() {
-        return llvm::ConstantFP::get(*context, llvm::APFloat(value));
+        return llvm::ConstantFP::get(
+            llvm::Type::getDoubleTy(*context), llvm::APFloat(value)
+        );
     }
 
     constexpr std::string str() const { return "FloatLiteral"; }
+};
+
+// NOTE: Temporary IntLiteral class to treat int literals the same as floats
+class IntLiteral : public FloatLiteral {
+public:
+    constexpr std::string str() const { return "IntLiteral"; }
+};
+
+class BinaryOp : public Expr {
+private:
+    TokenType Op; // The operator used
+    ExprPtr LHS;
+    ExprPtr RHS;
+public:
+    BinaryOp(TokenType kind, ExprPtr&& lhs, ExprPtr&& rhs) 
+        : Op(kind), LHS(std::move(lhs)), RHS(std::move(rhs)) {}
+
+    llvm::Value* codegen() {
+        llvm::Value* L = LHS->codegen();
+        llvm::Value* R = RHS->codegen();
+        if (!L || !R) return nullptr;
+
+        switch (Op) {
+            // Comparison operators
+            case TokenType::EqualEqual:
+                return builder->CreateICmpEQ(L, R, "eqtmp");
+            case TokenType::ExclEqual:
+                return builder->CreateICmpNE(L, R, "netmp");
+            case TokenType::More:
+                return builder->CreateICmpSLT(L, R, "gttmp");
+            case TokenType::MoreEqual:
+                return builder->CreateICmpSLE(L, R, "getmp");
+            case TokenType::Less:
+                return builder->CreateICmpSLT(L, R, "lttmp");
+            case TokenType::LessEqual:
+                return builder->CreateICmpSLE(L, R, "letmp");
+
+            // Mathematical operators
+            case TokenType::Plus:
+                return builder->CreateAdd(L, R, "addtmp");
+            case TokenType::Minus:
+                return builder->CreateSub(L, R, "subtmp");
+            case TokenType::Star: // Times
+                return builder->CreateMul(L, R, "multmp");
+            case TokenType::Slash: // Divide
+                // if (L->getType()->isIntegerTy()) { // Signed or unsigned
+                //     return builder->CreateSDiv(L, R, "divtmp");  
+                // } else
+                //     return builder->CreateFDiv(L, R, "fdivtmp");
+                // NOTE: Currently only works with float
+                return builder->CreateFDiv(L, R, "fdivtmp");
+
+            // TODO: Implement assignment operators
+
+            // Incremental/decremental operators
+            case TokenType::PlusPlus:
+                break;
+            case TokenType::MinusMinus:
+                break;
+            case TokenType::PlusEqual:
+                break;
+            case TokenType::MinusEqual:
+                break;
+            case TokenType::StarEqual:
+                break;
+            case TokenType::SlashEqual:
+                break;
+
+            // Assignment
+            case TokenType::Equal:
+                break;
+        }
+
+        llvm::outs() << "Unsupported operator type: " << strTokenType(Op) << "\n";
+        return nullptr;
+    }
+
+    constexpr std::string str() const { return "BinaryOp"; }
 };
 
 // TODO: Functions not yet supported

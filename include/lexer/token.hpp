@@ -53,18 +53,18 @@ enum class TokenType {
     Star,           // *
     Slash,          // /
 
-    PlusPlus,       // ++
-    MinusMinus,     // --
+    PlusPlus,       // ++   Increments by one
+    MinusMinus,     // --   Decrements by one
 
-    PlusEqual,      // +=
-    MinusEqual,     // -=
-    TimesEqual,     // *=
-    DivideEqual,    // /=
+    PlusEqual,      // +=   Increments a with b
+    MinusEqual,     // -=   Decrements a with b
+    StarEqual,      // *=   Multiplies a with b
+    SlashEqual,     // /=   Divides    a with b
 
-    DoubleEqual,    // ==
-    NotEqual,       // !=
-    MTEqual,        // >=
-    LTEqual,        // <=
+    EqualEqual,     // ==   a is equal to b
+    ExclEqual,      // !=   a is not equal to b
+    MoreEqual,      // >=   a is more than or equal to b
+    LessEqual,      // <=   a is less than or equal to b
 
     LogAND,         // &&
     LogOR,          // ||
@@ -74,19 +74,19 @@ enum class TokenType {
 /*  BitNOT,         // !  Same as "Exclamation" */
 
     Exclamation,    // !
-    Equal,          // =
+    Equal,          // =    Assignment operator
     Ampersand,      // &
     Pipe,           // |
 
     Colon,          // :
-    DoubleColon,    // ::
+    ColonColon,     // ::
     Comma,          // ,
     Dot,            // .
 
-    Arrow,         // ->
+    Arrow,          // ->   Range Operator
 
     LShift, RShift, // << and >>
-    LAngle, RAngle, // < and >
+    Less, More,     // < and >  
     LParen, RParen, // ( and )
     LBrace, RBrace, // { and }
     LBrack, RBrack, // [ and ]
@@ -94,94 +94,94 @@ enum class TokenType {
 
 llvm::StringRef strTokenType(TokenType type) {
     switch (type) {
-        case TokenType::Unknown: return "Unknown";
-        case TokenType::Eof: return "Eof";
+        case TokenType::Unknown:    return "Unknown";
+        case TokenType::Eof:        return "Eof";
 
         case TokenType::Identifier: return "Identifier";
-        case TokenType::Int: return "Int";
-        case TokenType::Float: return "Float";
-        case TokenType::String: return "String";
-        case TokenType::Character: return "Character";
+        case TokenType::Int:        return "Int";
+        case TokenType::Float:      return "Float";
+        case TokenType::String:     return "String";
+        case TokenType::Character:  return "Character";
 
-        case TokenType::Const: return "Const";
-        case TokenType::Let: return "Let";
-        case TokenType::Mut: return "Mut";
-        case TokenType::Temp: return "Temp";
-        case TokenType::Type: return "Type";
-        case TokenType::Move: return "Move";
-        case TokenType::Self: return "Self";
+        case TokenType::Const:      return "Const";
+        case TokenType::Let:        return "Let";
+        case TokenType::Mut:        return "Mut";
+        case TokenType::Temp:       return "Temp";
+        case TokenType::Type:       return "Type";
+        case TokenType::Move:       return "Move";
+        case TokenType::Self:       return "Self";
         
-        case TokenType::End: return "End";
+        case TokenType::End:        return "End";
 
-        case TokenType::If: return "If";
-        case TokenType::Elif: return "Elif";
-        case TokenType::Else: return "Else";
-        case TokenType::Match: return "Match";
-        case TokenType::Case: return "Case";
+        case TokenType::If:         return "If";
+        case TokenType::Elif:       return "Elif";
+        case TokenType::Else:       return "Else";
+        case TokenType::Match:      return "Match";
+        case TokenType::Case:       return "Case";
 
-        case TokenType::While: return "While";
-        case TokenType::For: return "For";
-        case TokenType::Break: return "Break";
+        case TokenType::While:      return "While";
+        case TokenType::For:        return "For";
+        case TokenType::Break:      return "Break";
 
-        case TokenType::Fn: return "Fn";
-        case TokenType::Return: return "Return";
+        case TokenType::Fn:         return "Fn";
+        case TokenType::Return:     return "Return";
 
-        case TokenType::Enum: return "Enum";
-        case TokenType::Struct: return "Struct";
-        case TokenType::Impl: return "Impl";
-        case TokenType::Trait: return "Trait";
+        case TokenType::Enum:       return "Enum";
+        case TokenType::Struct:     return "Struct";
+        case TokenType::Impl:       return "Impl";
+        case TokenType::Trait:      return "Trait";
 
-        case TokenType::Import: return "Import";
-        case TokenType::Export: return "Export";
+        case TokenType::Import:     return "Import";
+        case TokenType::Export:     return "Export";
 
-        case TokenType::Plus: return "Plus";
-        case TokenType::Minus: return "Minus";
-        case TokenType::Star: return "Star";
-        case TokenType::Slash: return "Slash";
+        case TokenType::Plus:       return "Plus";
+        case TokenType::Minus:      return "Minus";
+        case TokenType::Star:       return "Star";
+        case TokenType::Slash:      return "Slash";
 
-        case TokenType::PlusPlus: return "PlusPlus";
+        case TokenType::PlusPlus:   return "PlusPlus";
         case TokenType::MinusMinus: return "MinusMinus";
 
-        case TokenType::PlusEqual: return "PlusEqual";
+        case TokenType::PlusEqual:  return "PlusEqual";
         case TokenType::MinusEqual: return "MinusEqual";
-        case TokenType::TimesEqual: return "TimesEqual";
-        case TokenType::DivideEqual: return "DivideEqual";
+        case TokenType::StarEqual:  return "StarEqual";
+        case TokenType::SlashEqual: return "SlashEqual";
 
-        case TokenType::DoubleEqual: return "DoubleEqual";
-        case TokenType::NotEqual: return "NotEqual";
-        case TokenType::MTEqual: return "MTEqual";
-        case TokenType::LTEqual: return "LTEqual";
+        case TokenType::EqualEqual: return "DoubleEqual";
+        case TokenType::ExclEqual:  return "NotEqual";
+        case TokenType::MoreEqual:  return "MoreEqual";
+        case TokenType::LessEqual:  return "LessEqual";
 
-        case TokenType::LogAND: return "LogAND";
-        case TokenType::LogOR: return "LogOR";
-        case TokenType::BitXOR: return "BitXOR";
+        case TokenType::LogAND:     return "LogAND";
+        case TokenType::LogOR:      return "LogOR";
+        case TokenType::BitXOR:     return "BitXOR";
 
-        case TokenType::Exclamation: return "Exclamation";
-        case TokenType::Equal: return "Equal";
-        case TokenType::Ampersand: return "Ampersand";
-        case TokenType::Pipe: return "Pipe";
+        case TokenType::Exclamation:return "Exclamation";
+        case TokenType::Equal:      return "Equal";
+        case TokenType::Ampersand:  return "Ampersand";
+        case TokenType::Pipe:       return "Pipe";
 
-        case TokenType::Colon: return "Colon";
-        case TokenType::DoubleColon: return "DoubleColon";
-        case TokenType::Comma: return "Comma";
-        case TokenType::Dot: return "Dot";
+        case TokenType::Colon:      return "Colon";
+        case TokenType::ColonColon: return "ColonColon";
+        case TokenType::Comma:      return "Comma";
+        case TokenType::Dot:        return "Dot";
 
-        case TokenType::Arrow: return "Arrow";
+        case TokenType::Arrow:      return "Arrow";
 
-        case TokenType::LShift: return "LShift";
-        case TokenType::RShift: return "RShift";
+        case TokenType::LShift:     return "LShift";
+        case TokenType::RShift:     return "RShift";
 
-        case TokenType::LAngle: return "LAngle";
-        case TokenType::RAngle: return "RAngle";
+        case TokenType::More:       return "More";
+        case TokenType::Less:       return "Less";
 
-        case TokenType::LParen: return "LParen";
-        case TokenType::RParen: return "RParen";
+        case TokenType::LParen:     return "LParen";
+        case TokenType::RParen:     return "RParen";
 
-        case TokenType::LBrace: return "LBrace";
-        case TokenType::RBrace: return "RBrace";
+        case TokenType::LBrace:     return "LBrace";
+        case TokenType::RBrace:     return "RBrace";
 
-        case TokenType::LBrack: return "LBrack";
-        case TokenType::RBrack: return "RBrack";
+        case TokenType::LBrack:     return "LBrack";
+        case TokenType::RBrack:     return "RBrack";
 
         default:
             assert(false && "Unknown token can't be converted to string.");
@@ -222,16 +222,16 @@ struct Token {
 
             case TokenType::PlusEqual:
             case TokenType::MinusEqual:
-            case TokenType::TimesEqual:
-            case TokenType::DivideEqual:
+            case TokenType::StarEqual:
+            case TokenType::SlashEqual:
 
-            case TokenType::DoubleEqual:
-            case TokenType::NotEqual:
-            case TokenType::MTEqual:
-            case TokenType::LTEqual:
+            case TokenType::EqualEqual:
+            case TokenType::ExclEqual:
+            case TokenType::MoreEqual:
+            case TokenType::LessEqual:
 
-            case TokenType::RAngle: // More than
-            case TokenType::LAngle: // Less than
+            case TokenType::More:
+            case TokenType::Less:
 
             case TokenType::LogAND:
             case TokenType::LogOR:
