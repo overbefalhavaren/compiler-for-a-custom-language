@@ -2,6 +2,8 @@
 
 #include "llvm/ADT/StringRef.h"
 
+#include "include/io/source_location.hpp"
+
 namespace c {
 
 enum class TokenType {
@@ -23,6 +25,8 @@ enum class TokenType {
     Type,   // Declare type aliases or unions
     Move,   // Used to give up ownership, like std::move
     Self,   // Used like "this"
+    Pub,    // Declare an attribute or method of a struct or impl as public. Private by default
+    From,   // Used in imports to import specific attributes or derived impls to a struct
 
     End,    // Used to declare the end of a scope in place of curly brackets
 
@@ -189,24 +193,153 @@ llvm::StringRef strTokenType(TokenType type) {
     }
 }
 
+class [[nodiscard]] Token {
+    friend class Lexer; // So the lexer can get access to the constructor
+private:    
+    TokenType Type;
+    SrcSpan Span;
+
+    // Identifier or data for literals and identifiers.
+    llvm::StringRef Data;
+public:
+    Token() = default;
+    Token(TokenType type, SrcSpan&& span) 
+        : Type(type), Span(std::move(span)) {}
+    Token(TokenType type, SrcSpan&& span, llvm::StringRef data)
+        : Type(type), Span(std::move(span)), Data(data) {}
+    ~Token() = default;
+
+    Token(Token&&) = default;
+    Token& operator=(Token&&) = default;
+
+    Token(const Token&) = default;
+    Token& operator=(const Token&) = default;
+
+    inline TokenType getType() const {
+        return Type;
+    }
+
+    inline SrcSpan getSpan() const {
+        return Span;
+    }
+
+    inline SrcLoc getStartLoc() const {
+        return Span.getStartLoc();
+    }
+
+    inline SrcLoc getEndLoc() const {
+        return Span.getEndLoc();
+    }
+
+    inline size_t getLength() const {
+        return Span.getLength();
+    }
+
+    inline bool is(TokenType T) const {
+        return Type == T;
+    }
+
+    inline bool isNot(TokenType T) const {
+        return Type != T;
+    }
+
+    inline llvm::StringRef getData() const {
+        return Data;
+    }
+
+    bool isLiteral() const {
+        return is(TokenType::String) || is(TokenType::Int) || is(TokenType::Float);
+    }
+
+    bool isKeyword() const {
+        switch (Type) {
+            default: 
+                return false;
+            case TokenType::Const:
+            case TokenType::Let:
+            case TokenType::Mut:
+            case TokenType::Temp:
+            case TokenType::Type:
+            case TokenType::Move:
+            case TokenType::Self:
+            case TokenType::Pub:
+            case TokenType::From:
+            case TokenType::End:
+            case TokenType::If:
+            case TokenType::Elif:
+            case TokenType::Else:
+            case TokenType::Match:
+            case TokenType::Case:
+            case TokenType::While:
+            case TokenType::For:
+            case TokenType::Break:
+            case TokenType::Fn:
+            case TokenType::Return:
+            case TokenType::Enum:
+            case TokenType::Struct:
+            case TokenType::Impl:
+            case TokenType::Trait:
+            case TokenType::Import:
+            case TokenType::Export:
+                return true;
+        }
+    }
+
+    bool isOperator() const {
+        switch (Type) {
+            default:
+                return false;
+            case TokenType::Plus:
+            case TokenType::Minus:
+            case TokenType::Star:
+            case TokenType::Slash:
+            case TokenType::PlusPlus:
+            case TokenType::MinusMinus:
+            case TokenType::PlusEqual:
+            case TokenType::MinusEqual:
+            case TokenType::StarEqual:
+            case TokenType::SlashEqual:
+            case TokenType::EqualEqual:
+            case TokenType::ExclEqual:
+            case TokenType::MoreEqual:
+            case TokenType::LessEqual:
+            case TokenType::LogAND:
+            case TokenType::LogOR:
+            case TokenType::Exclamation:
+            case TokenType::Equal:
+            case TokenType::Ampersand:
+            case TokenType::Pipe:
+            case TokenType::Less:
+            case TokenType::More:
+            case TokenType::LShift:
+            case TokenType::RShift:
+                return true;
+        }
+    }
+};
+
+/*
 struct Token {
     TokenType type;
-    // Span span; // TODO: Switch "lexeme" for "span" when the file stream manager is implemented
+    SrcSpan span; // TODO: Switch "lexeme" for "span" when the file stream manager is implemented
 
     // TODO: Implement a file management system
 
     // Temporary lexeme attribute until proper spans and a file stream 
     // management system can be implemented so that you can get the lexeme 
     // from a span using the file stream manager.
-    llvm::StringRef lexeme; // TODO: Deprecate this
+    // llvm::StringRef lexeme; // TODO: Deprecate this
 
     Token() = default;
-    Token(TokenType type, llvm::StringRef lexeme) : type(type), lexeme(lexeme) {}
+    // Token(TokenType type, llvm::StringRef lexeme) : type(type), lexeme(lexeme) {}
 
     // TODO: Implement when the file stream manager class is implemented
-    // Token(TokenType type, Span span);
-    // Token(TokenType type, Location location);
-    // Token(TokenType type, Location start, Location end);
+    Token(TokenType type, SrcSpan span) 
+        : type(type), span(span) {}
+    Token(TokenType type, SrcLoc offset) 
+        : type(type), span(offset, offset) {}
+    Token(TokenType type, SrcLoc start, SrcLoc end)
+        : type(type), span(start, end) {}
 
     inline bool is(TokenType T) const { return type == T; }
     
@@ -251,9 +384,12 @@ struct Token {
         }
     }
 
+    inline llvm::StringRef getLexeme() const { assert(false); return lexeme; }
+
     std::string str() const {
-        return std::string() + "Token{type=TokenType::" + strTokenType(type).str() + ", lexeme=\"" + lexeme.str() + "\"}";
+        return std::string() + "Token{type=TokenType::" + strTokenType(type).str() + ", lexeme=\"" + getLexeme().str() + "\"}";
     }
 };
+*/
 
 } // namespace c

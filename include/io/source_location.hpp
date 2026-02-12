@@ -8,80 +8,119 @@ namespace c {
 /*
  */
 class [[nodiscard]] FileID {
+    friend class SourceManager;
 private:
     uint8_t ID;
+
+    FileID(uint8_t id) : ID(id) {}
 public:
-    FileID(FileID&&) = delete;
-    FileID(const FileID&) = delete;
+    FileID() = default;
 
-    operator uint8_t() const { return ID; }
-    operator bool() const { return is_valid(); }
+    FileID(FileID&&) = default;
+    FileID& operator=(FileID&&) = default;
 
-    inline bool is_valid() const { return ID != 0; }
+    FileID(const FileID&) = default;
+    FileID& operator=(const FileID&) = default;
+
+    inline operator uint8_t() const { return ID; }
+    inline operator bool() const { return isValid(); }
+    inline bool operator==(const FileID& other) const { return ID == other.ID; }
+
+    inline uint8_t id() const { return ID; }
+    inline bool isValid() const { return ID != 0; }
 };
 
 /*
  * Stores an offset to a location in a source file with a 
  * unique uint8 id defined by the StreamManager class.
  */
-class Location {
-    friend class Span;
+class SrcLoc {
+    friend class SrcSpan;
     friend class Lexer;
 private:
     // TODO: 
     // Can optimize this by splitting a uint32 into uint24 (offset) and uint8 (file_id). 
     // The max value of uint24 is 16 777 215 which is more than enough for an offset.
     uint32_t Offset;
-    const FileID& ID;
+    FileID ID;
 public:
-    bool operator ==(const Location& other) {
-        return id() == other.id() && offset() == other.offset();
+    SrcLoc() = default;
+    ~SrcLoc() = default;
+
+    SrcLoc(SrcLoc&&) = default;
+    SrcLoc& operator=(SrcLoc&&) = default;
+
+    SrcLoc(const SrcLoc&) = default;
+    SrcLoc& operator=(const SrcLoc&) = default;
+
+    inline bool operator==(const SrcLoc& other) {
+        return getID() == other.getID() && getOffset() == other.getOffset();
     }
 
-    inline uint32_t offset() const { return Offset; }
-    inline uint8_t id() const { return (uint8_t)ID; }
+    inline uint32_t getOffset() const { return Offset; }
+    inline FileID getID() const { return ID; }
 private:
-    Location(uint32_t offset, FileID id) : Offset(offset), ID(id) {}
+    SrcLoc(FileID id, uint32_t offset) 
+        : ID(id), Offset(offset) {}
 
-    bool add(uint32_t count) { Offset += count; } 
+    void add(uint32_t count) { Offset += count; } 
 };
 
 /* Stores two offsets in a source file to creata a span. */
-class Span {
+class SrcSpan {
     friend class Lexer;
+    friend class Token;
 private:
     // TODO: 
     // can be optimized in the same way a Location but using a uint56 instead.
     // (uint24) start, (uint24) end, (uint8) id
     uint32_t Start;
     uint32_t End;
-    const FileID& ID;
+    FileID ID;
+
+    SrcSpan(const FileID& id, uint32_t start, uint32_t end) 
+        : ID(id), Start(start), End(end) {
+            assert(ID.isValid() && "Can't make a span from an invalid FileID.");
+            assert(Start <= End && "The start of a span can't be larger than the end.");
+        }
 public:
-    bool operator ==(const Span& other) {
-        return id() == other.id() && 
-               start() == other.start() && 
-               end() == other.end();
+    SrcSpan() = default;
+    SrcSpan(const SrcLoc& start, const SrcLoc& end)
+        : SrcSpan(start.getID(), start.getOffset(), end.getOffset()) {
+        assert(start.getID() == end.getID() && "Can't make a span from locations in different files.");
+    }
+    ~SrcSpan() = default;
+
+    SrcSpan(SrcSpan&&) = default;
+    SrcSpan& operator=(SrcSpan&&) = default;
+
+    SrcSpan(const SrcSpan&) = default;
+    SrcSpan& operator=(const SrcSpan&) = default;
+
+    bool operator ==(const SrcSpan& other) {
+        return getID() == other.getID() && 
+               getStart() == other.getStart() && 
+               getEnd() == other.getEnd();
     }
 
-    inline uint32_t start() const { return Start; }
-    inline uint32_t end() const { return End; }
-    inline uint8_t id() const { return (uint8_t)ID; }
-private:
-    explicit Span(const Location& start, const Location& end) 
-    : ID(start.ID), Start(start.offset()), End(end.offset()) {
-        assert(start.id() == end.id() && "Can't make a span from locations in different files.");
+    inline const FileID& getID() const { return ID; }
+    inline SrcLoc getStartLoc() const { return SrcLoc(ID, Start); }
+    inline SrcLoc getEndLoc() const { return SrcLoc(ID, End); }
+
+    inline size_t getLength() const { return End - Start; }
+
+    inline uint32_t getStart() const { return Start; }
+    inline uint32_t getEnd() const { return End; }
+
+    inline bool contains(const SrcLoc& loc) const {
+        assert(ID == loc.getID() && "Can't check if a SrcSpan contains an SrcLoc from a different file.");
+        return Start <= loc.getOffset() && loc.getOffset() <= End;
     }
 
-    Span(uint32_t start, uint32_t end, const FileID& id) 
-    : ID(id), Start(start), End(end) {
-        do_asserts();
+    inline bool contains(const SrcSpan& span) const {
+        assert(ID == span.getID() && "Can't compare spans from different files.");
+        return Start <= span.getStart() && span.getEnd() <= End;
     }
-
-    inline void do_asserts() {
-        assert(ID.is_valid() && "Can't make a span from an invalid file. Make sure the file is opened");
-        assert(Start <= End && "The start of a span can't be larger than the end.");
-    }
-
 };
 
 } // namespace c
