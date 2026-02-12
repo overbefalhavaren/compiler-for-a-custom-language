@@ -1,6 +1,6 @@
 #pragma once
 
-#include "include/ast/stmt.hpp"
+#include "include/ast/Stmt.hpp"
 
 namespace c {
 namespace ast {

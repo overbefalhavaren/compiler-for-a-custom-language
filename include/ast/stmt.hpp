@@ -3,8 +3,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/SmallVector.h"
 
-#include "include/ast/type.hpp"
-#include "include/lexer/token.hpp"
+#include "include/ast/Type.hpp"
+#include "include/lexer/Token.hpp"
 #include "include/io/source_location.hpp"
 
 namespace c {
@@ -19,7 +19,7 @@ class VarDecl;
 class FunctionDecl;
 class ImplDecl;
 class StructDecl;
-class ExprStmt;
+class Expr;
 class CallExpr;
 class TypeExpr;
 class VarRef;
@@ -38,8 +38,6 @@ public:
     enum StmtClass {
         SC_BlockStmt,
 
-        SC_CastStmt,
-
         SC_ReturnStmt,
 
         SC_IfStmt,
@@ -51,20 +49,20 @@ public:
         SC_ImplDecl,
         SC_StructDecl,
 
-        SC_CallExpr,
+        SC_QualNameExpr,
+        SC_AccessExpr,
+        SC_CastExpr,
         SC_MoveExpr,
-
-        SC_NameRef,
-        SC_TypeExpr,
-        SC_VarRef,
-        SC_ImplRef,
-
+        SC_CallExpr,
+        SC_NameExpr,
         SC_BinaryOperator,
         SC_UnaryOperator,
 
-        SC_IntLiteral,
-        SC_FloatLiteral,
         SC_StringLiteral,
+        SC_NumberLiteral,
+        SC_FloatLiteral,
+        SC_CharLiteral,
+        SC_BoolLiteral,
 
         SC_NamedTypeExpr,
         SC_PointerTypeExpr,
@@ -113,101 +111,18 @@ public:
     }
 };
 
-template <typename T> constexpr void _do_isa_assert() {
-    static_assert(std::is_base_of<Stmt, T>::value, "T must be a subclass of Stmt.");
-}
-
-template <typename T> inline bool isa(const Stmt* s) {
-    _do_isa_assert<T>();
-    return s->getStmtClass() == T::ClassID;
-}
-
-template <typename T> inline bool isa(const Stmt& s) {
-    _do_isa_assert<T>();
-    return s.getStmtClass() == T::ClassID;
-}
-
-template <typename T> inline bool isa(const std::unique_ptr<Stmt>& s) {
-    _do_isa_assert<T>();
-    return s->getStmtClass() == T::ClassID;
-}
-
-template <typename T> constexpr void _do_cast_assert() {
-    static_assert(std::is_base_of<Stmt, T>::value, "T must be a subclass of Stmt.");
-}
-
-template <typename T> inline T* cast(Stmt* s) { 
-    _do_cast_assert<T>();
-    return static_cast<T*>(s);
-}
-
-template <typename T> inline const T* cast(const Stmt* s) {
-    _do_cast_assert<T>();
-    return static_cast<const T*>(s);
-}
-
-template <typename T> inline T& cast(Stmt& s) { 
-    _do_cast_assert<T>();
-    return static_cast<T&>(s);
-}
-
-template <typename T> inline const T& cast(const Stmt& s) { 
-    _do_cast_assert<T>();
-    return static_cast<const T&>(s);
-}
-
-template <typename T> inline std::unique_ptr<T>& cast(std::unique_ptr<Stmt>& s) { 
-    _do_cast_assert<T>(); 
-    return static_cast<std::unique_ptr<T>&>(s);
-}
-
-template <typename T> inline std::unique_ptr<T>& cast(const std::unique_ptr<Stmt>& s) {
-    _do_cast_assert<T>(); 
-    return static_cast<const std::unique_ptr<T>&>(s);
-}
-
-template <typename T>
-inline T* dyn_cast(Stmt* s) {
-    return isa<T>(s) ? static_cast<T*>(s) : nullptr;
-}
-
-template <typename T>
-inline const T* dyn_cast(const Stmt* s) {
-    return isa<T>(s) ? static_cast<T*>(s) : nullptr;
-}
-
-template <typename T>
-inline T& dyn_cast(Stmt& s) {
-    return isa<T>(s) ? static_cast<T*>(s) : nullptr;
-}
-
-template <typename T>
-inline const T& dyn_cast(const Stmt& s) {
-    return isa<T>(s) ? static_cast<T*>(s) : nullptr;
-}
-
-template <typename T>
-inline std::unique_ptr<T>& dyn_cast(std::unique_ptr<Stmt>& s) {
-    return isa<T>(s) ? static_cast<T*>(s) : nullptr;
-}
-
-template <typename T>
-inline const std::unique_ptr<T>& dyn_cast(const std::unique_ptr<Stmt>& s) {
-    return isa<T>(s) ? static_cast<T*>(s) : nullptr;
-}
-
 class ControlStmtTrait {
 private:
     // Value: BinaryOperator or UnaryOperator
-    std::unique_ptr<ExprStmt> Condition;
+    std::unique_ptr<Expr> Condition;
 
-    // Value: ScopeStmt or ExprStmt
+    // Value: ScopeStmt or Expr
     std::unique_ptr<Stmt> Body; 
 protected:
-    ControlStmtTrait(std::unique_ptr<ExprStmt>&& condition, std::unique_ptr<Stmt>&& body)
+    ControlStmtTrait(std::unique_ptr<Expr>&& condition, std::unique_ptr<Stmt>&& body)
         : Condition(std::move(condition)), Body(std::move(body)) {}
 public:
-    inline const std::unique_ptr<ExprStmt>& getCondition() const {
+    inline const std::unique_ptr<Expr>& getCondition() const {
         // FIXME: For some reason asserts as false even though a condition exists
         // assert(Condition && "This statement has no condition.");
         return Condition; 
@@ -224,11 +139,11 @@ public:
     }
 };
 
-class NamedStmtTrait {
+class NameTrait {
 private:
     llvm::StringRef Name;
 public:
-    NamedStmtTrait(llvm::StringRef name)
+    NameTrait(llvm::StringRef name)
         : Name(name) {}
     
     inline llvm::StringRef getName() const {
@@ -294,10 +209,10 @@ public:
 // #            Declaration Statements              #
 // ##################################################
 
-class DeclStmt : public Stmt, public NamedStmtTrait {
+class DeclStmt : public Stmt, public NameTrait {
 protected:
     DeclStmt(StmtClass cls, SrcSpan span, llvm::StringRef name)
-        : Stmt(cls, span), NamedStmtTrait(name) {}
+        : Stmt(cls, span), NameTrait(name) {}
 };
 
 class TypeDecl : public DeclStmt {
@@ -309,11 +224,11 @@ public:
     TypeDecl(SrcSpan span, llvm::StringRef name, std::unique_ptr<TypeExpr>&& type)
         : DeclStmt(ClassID, span, name), Value(std::move(type)) {}
 
-    inline const std::unique_ptr<TypeExpr>& getTypeExpr() const {
+    inline const std::unique_ptr<TypeExpr>& getType() const {
         return Value; 
     }
 
-    inline std::unique_ptr<TypeExpr>& getTypeExpr() {
+    inline std::unique_ptr<TypeExpr>& getType() {
         return Value;
     }
 
@@ -345,14 +260,14 @@ private:
     //      Context: Argument
     TokenType Kind;
 
-    std::unique_ptr<TypeExpr> TypePtr;
-    std::unique_ptr<ExprStmt> Value;
+    std::unique_ptr<TypeExpr> Ty;
+    std::unique_ptr<Expr> Value;
 public:
-    VarDecl(SrcSpan span, llvm::StringRef name, TokenType kind, std::unique_ptr<TypeExpr>&& type, std::unique_ptr<ExprStmt>&& value)
-        : DeclStmt(ClassID, span, name), Kind(kind), TypePtr(std::move(type)), Value(std::move(value)) {}
+    VarDecl(SrcSpan span, llvm::StringRef name, TokenType kind, std::unique_ptr<TypeExpr>&& type, std::unique_ptr<Expr>&& value)
+        : DeclStmt(ClassID, span, name), Kind(kind), Ty(std::move(type)), Value(std::move(value)) {}
 
-    VarDecl(SrcSpan span, llvm::StringRef name, bool pub, TokenType kind, std::unique_ptr<TypeExpr>&& type, std::unique_ptr<ExprStmt>&& value)
-        : DeclStmt(ClassID, span, name), VisibilityTrait(pub), Kind(kind), TypePtr(std::move(type)), Value(std::move(value)) {}
+    VarDecl(SrcSpan span, llvm::StringRef name, bool pub, TokenType kind, std::unique_ptr<TypeExpr>&& type, std::unique_ptr<Expr>&& value)
+        : DeclStmt(ClassID, span, name), VisibilityTrait(pub), Kind(kind), Ty(std::move(type)), Value(std::move(value)) {}
 
     inline bool isAttribute() const { 
         return getVisibility() != VK_Disabled;
@@ -367,23 +282,27 @@ public:
     }
 
     inline bool isAutoTyped() const {
-        TypePtr != nullptr;
+        Ty != nullptr;
     }
 
-    inline const std::unique_ptr<TypeExpr>& getTypeExpr() const {
-        return TypePtr;
+    inline const std::unique_ptr<TypeExpr>& getType() const {
+        return Ty;
     }
 
-    inline std::unique_ptr<ast::TypeExpr>& getTypeExpr() {
-        return TypePtr;
+    inline std::unique_ptr<TypeExpr>& getType() {
+        return Ty;
     }
-    
+
     inline TokenType getVarKind() const {
         return Kind; 
     }
 
-    inline const std::unique_ptr<ExprStmt>& getValue() const { 
+    inline const std::unique_ptr<Expr>& getValue() const { 
         return Value; 
+    }
+
+    inline std::unique_ptr<Expr>& getValue() { 
+        return Value;
     }
 };
 
@@ -391,15 +310,15 @@ class FunctionDecl : public DeclStmt, public VisibilityTrait {
 public:
     static constexpr StmtClass ClassID = StmtClass::SC_FunctionDecl;
 private:
-    std::unique_ptr<TypeExpr> TypePtr;
+    std::unique_ptr<TypeExpr> Ty;
     llvm::SmallVector<std::unique_ptr<VarDecl>> Args;
     std::unique_ptr<BlockStmt> Body;
 public:
     FunctionDecl(SrcSpan span, llvm::StringRef name, std::unique_ptr<TypeExpr>&& type, std::unique_ptr<BlockStmt>&& body, llvm::SmallVector<std::unique_ptr<VarDecl>>&& args)
-        : DeclStmt(ClassID, span, name), TypePtr(std::move(type)), Body(std::move(body)), Args(std::move(args)) {}
+        : DeclStmt(ClassID, span, name), Ty(std::move(type)), Body(std::move(body)), Args(std::move(args)) {}
 
     FunctionDecl(SrcSpan span, llvm::StringRef name, bool pub, std::unique_ptr<TypeExpr>&& type, std::unique_ptr<BlockStmt>&& body, llvm::SmallVector<std::unique_ptr<VarDecl>>&& args)
-        : DeclStmt(ClassID, span, name), VisibilityTrait(pub), TypePtr(std::move(type)), Body(std::move(body)), Args(std::move(args)) {}
+        : DeclStmt(ClassID, span, name), VisibilityTrait(pub), Ty(std::move(type)), Body(std::move(body)), Args(std::move(args)) {}
 
     inline bool isMethod() const { 
         return getVisibility() != VK_Disabled; 
@@ -410,16 +329,16 @@ public:
     }
 
     inline bool hasReturn() const {
-        return TypePtr != nullptr;
+        return Ty != nullptr;
     }
 
     inline bool hasArgs() const {
         return Args.size();
     }
 
-    inline const std::unique_ptr<TypeExpr>& getTypeExpr() const {
+    inline const std::unique_ptr<TypeExpr>& getType() const {
         assert(hasReturn() && "This function has no type.");
-        return TypePtr;
+        return Ty;
     }
 
     inline const std::unique_ptr<BlockStmt>& getBody() const { 
@@ -502,193 +421,55 @@ public:
 };
 
 // ##################################################
-// #            Expression Statements               #
-// ##################################################
-
-class ExprStmt : public Stmt {
-protected:
-    ExprStmt(StmtClass cls, SrcSpan span)
-        : Stmt(cls, std::move(span)) {}
-};
-
-// class QualNameExpr : public ExprStmt, public NamedStmtTrait {
-// private:
-//     std::unique_ptr<>
-// };
-
-class CallExpr : public ExprStmt {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_CallExpr;
-private:
-    std::string Callee;
-
-    // Positional Arguments
-    // Values: CallExpr, VarRef, IntLiteral, FloatLiteral, StringLiteral
-    llvm::SmallVector<std::unique_ptr<ExprStmt>> Args;
-
-    // Keyword Arguments
-    // Values: CallExpr, VarRef, IntLiteral, FloatLiteral, StringLiteral
-    llvm::StringMap<std::unique_ptr<ExprStmt>> KWArgs;
-public:
-    CallExpr(SrcSpan span, llvm::StringRef callee)
-        : ExprStmt(ClassID, span), Callee(callee) {}
-    CallExpr(SrcSpan span, llvm::StringRef callee, llvm::SmallVector<std::unique_ptr<ExprStmt>>&& args, llvm::StringMap<std::unique_ptr<ExprStmt>>&& kwargs)
-        : ExprStmt(ClassID, span), Callee(callee), Args(std::move(args)), KWArgs(std::move(kwargs)) {}
-    
-    inline llvm::StringRef getCalleeName() const { 
-        return Callee;
-    }
-
-    inline bool hasParams() const {
-        return Args.size() || KWArgs.size();
-    }
-
-    inline const llvm::SmallVector<std::unique_ptr<ExprStmt>>& getArgs() const {
-        return Args; 
-    }
-
-    inline const llvm::StringMap<std::unique_ptr<ExprStmt>>& getKWArgs() const {
-        return KWArgs; 
-    }
-};
-
-class MoveExpr : public ExprStmt {
-    static constexpr StmtClass ClassID = StmtClass::SC_MoveExpr;
-private:
-    std::unique_ptr<ExprStmt> Value;
-public:
-    MoveExpr(SrcSpan span, std::unique_ptr<ExprStmt>&& value)
-        : ExprStmt(ClassID, span), Value(std::move(value)) {}
-
-    const ExprStmt& getValue() const {
-        return *Value;
-    }
-};
-
-class NameRef : public ExprStmt, public NamedStmtTrait {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_NameRef;
-    
-    NameRef(SrcSpan span, llvm::StringRef name) 
-        : ExprStmt(ClassID, span), NamedStmtTrait(name) {}
-};
-
-class VarRef : public ExprStmt, public NamedStmtTrait {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_VarRef;
-public:
-    VarRef(SrcSpan span, llvm::StringRef name)
-        : ExprStmt(ClassID, span), NamedStmtTrait(name) {}
-};
-
-class ImplRef : public ExprStmt, public NamedStmtTrait {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_ImplRef;
-
-    ImplRef(SrcSpan span, llvm::StringRef name)
-        : ExprStmt(ClassID, span), NamedStmtTrait(name) {}
-};
-
-class BinaryOperator : public ExprStmt {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_BinaryOperator;
-private:
-    TokenType Op;
-    std::unique_ptr<ExprStmt> LHS;
-    std::unique_ptr<ExprStmt> RHS;
-public:
-    BinaryOperator(SrcSpan span, TokenType op, std::unique_ptr<ExprStmt>&& lhs, std::unique_ptr<ExprStmt>&& rhs)
-        : ExprStmt(ClassID, span), Op(op), LHS(std::move(lhs)), RHS(std::move(rhs)) {
-            assert(LHS && "'lhs' can't be nullptr.");
-            assert(RHS && "'rhs' can't be nullptr.");
-        }
-
-    inline TokenType getOperator() const { 
-        return Op; 
-    }
-
-    inline const std::unique_ptr<ExprStmt>& getLHS() const { 
-        return LHS; 
-    }
-
-    inline const std::unique_ptr<ExprStmt>& getRHS() const { 
-        return RHS; 
-    }
-};
-
-class UnaryOperator : public ExprStmt {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_UnaryOperator;
-private:
-    TokenType Op;
-    std::unique_ptr<ExprStmt> Expr;
-public:
-    UnaryOperator(SrcSpan span, TokenType op, std::unique_ptr<ExprStmt>&& expr)
-        : ExprStmt(ClassID, span), Op(op), Expr(std::move(expr)) {
-            assert(Expr && "'expr' can't be nullptr.");
-        }
-
-    inline TokenType getOperator() const { 
-        return Op; 
-    }
-
-    inline const std::unique_ptr<ExprStmt>& getExpr() const { 
-        return Expr; 
-    }
-};
-
-class IntLiteral : public ExprStmt {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_IntLiteral;
-private:
-    size_t Value;
-public:
-    IntLiteral(SrcSpan span, size_t value)
-        : ExprStmt(ClassID, span), Value(value) {}
-    
-    inline size_t getValue() const { 
-        return Value; 
-    }
-};
-
-class FloatLiteral : public ExprStmt {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_FloatLiteral;
-private:
-    double Value;
-public:
-    FloatLiteral(SrcSpan span, double value)
-        : ExprStmt(ClassID, span), Value(value) {}
-    
-    inline double getValue() const { 
-        return Value; 
-    }
-};
-
-class StringLiteral : public ExprStmt {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_StringLiteral;
-private:
-    std::string Value;
-public:
-    StringLiteral(SrcSpan span, llvm::StringRef value)
-        : ExprStmt(ClassID, span), Value(value) {}
-    
-    inline llvm::StringRef getValue() const { 
-        return Value; 
-    }
-};
-
-// ##################################################
 // #                Type Expressions                #
 // ##################################################
 
-class TypeExpr : public Stmt, public NamedStmtTrait {
+class TypeExpr : public NameTrait {
+public:
+    enum TypeKind {
+        NamedType,
+        PointerType,
+        TemplateType
+    };
+private:
+    TypeKind Kind;
+    Type* Resolved;
+public:
+    inline bool isResolved() const {
+        return Resolved != nullptr;
+    }
+
+    const Type* getResolved() const {
+        assert(isResolved && "Type is not resolved yet.");
+        return Resolved;
+    }
+
+    void setResolved(Type* T) {
+        assert(!isResolved() && "Type is already resolved.");
+        Resolved = T;
+    }
+
+    inline bool isNamedType() const {
+        return Kind == NamedType;
+    }
+
+    inline bool isPointerType() const {
+        return Kind == PointerType;
+    }
+
+    inline bool isTemplateType() const {
+        return Kind == TemplateType;
+    }
+};
+
+
+
+class TypeExpr : public Stmt, public NameTrait {
 private:
     const Type* Resolved;
 protected:
     TypeExpr(StmtClass cls, SrcSpan span, llvm::StringRef name) 
-        : Stmt(cls, std::move(span)), NamedStmtTrait(name), Resolved(nullptr) {}
+        : Stmt(cls, std::move(span)), NameTrait(name), Resolved(nullptr) {}
 public:
     inline bool isResolved() const {
         return Resolved != nullptr;
@@ -745,44 +526,20 @@ public:
 // #                Other Statements                #
 // ##################################################
 
-class CastStmt : public Stmt {
-public:
-    static constexpr StmtClass ClassID = StmtClass::SC_CastStmt;
-private:
-    std::unique_ptr<ExprStmt> Value;
-    std::unique_ptr<TypeExpr> TypePtr;
-public:
-    CastStmt(SrcSpan span, std::unique_ptr<TypeExpr>&& type, std::unique_ptr<ExprStmt>&& value)
-        : Stmt(ClassID, span), TypePtr(std::move(type)), Value(std::move(value)) {}
-    
-    inline bool isVoidCast() const {
-        return TypePtr != nullptr;
-    }
-
-    inline const std::unique_ptr<ExprStmt>& getValue() const {
-        return Value;
-    }
-
-    inline const std::unique_ptr<TypeExpr>& getTypeExpr() const {
-        assert(!isVoidCast() && "Can't get the type for a void cast.");
-        return TypePtr;
-    }
-};
-
 class ReturnStmt : public Stmt {
 public:
     static constexpr StmtClass ClassID = StmtClass::SC_ReturnStmt;
 private:
-    std::unique_ptr<ExprStmt> Value;
+    std::unique_ptr<Expr> Value;
 public:
-    ReturnStmt(SrcSpan span, std::unique_ptr<ExprStmt>&& value)
+    ReturnStmt(SrcSpan span, std::unique_ptr<Expr>&& value)
         : Stmt(ClassID, span), Value(std::move(value)) {}
 
     inline bool hasValue() const {
         return Value != nullptr;
     }
 
-    inline const ExprStmt& getValue() const {
+    inline const Expr& getValue() const {
         assert(hasValue() && "Can't get the value since none exists.");
         return *Value;
     }
@@ -794,7 +551,7 @@ public:
 private:        
     std::unique_ptr<IfStmt> Else;
 public:
-    IfStmt(SrcSpan span, std::unique_ptr<ExprStmt>&& condition, std::unique_ptr<Stmt>&& body, std::unique_ptr<IfStmt>&& else_)
+    IfStmt(SrcSpan span, std::unique_ptr<Expr>&& condition, std::unique_ptr<Stmt>&& body, std::unique_ptr<IfStmt>&& else_)
         : Stmt(ClassID, span), ControlStmtTrait(std::move(condition), std::move(body)), Else(std::move(else_)) {}
 
     inline bool isElse() const { 
@@ -815,7 +572,7 @@ class WhileStmt : public Stmt, public ControlStmtTrait {
 public:
     static constexpr StmtClass ClassID = StmtClass::SC_WhileStmt;
 
-    WhileStmt(SrcSpan span, std::unique_ptr<ExprStmt>&& condition, std::unique_ptr<Stmt>&& body)
+    WhileStmt(SrcSpan span, std::unique_ptr<Expr>&& condition, std::unique_ptr<Stmt>&& body)
         : Stmt(ClassID, span), ControlStmtTrait(std::move(condition), std::move(body)) {}
 };
 

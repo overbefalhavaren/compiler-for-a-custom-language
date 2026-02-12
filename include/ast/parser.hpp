@@ -4,10 +4,11 @@
 
 #include "llvm/ADT/SmallVector.h"
 
-#include "include/lexer/lexer.hpp"
-#include "include/lexer/token.hpp"
-#include "include/ast/stmt.hpp"
-#include "include/ast/module.hpp"
+#include "include/lexer/Lexer.hpp"
+#include "include/lexer/Token.hpp"
+#include "include/ast/Stmt.hpp"
+#include "include/ast/Expr.hpp"
+#include "include/ast/Module.hpp"
 
 namespace c {
 
@@ -66,17 +67,17 @@ private:
 
     template <typename T, typename... Args>
     inline std::unique_ptr<T> makeStmtPtr(Args&&... args) const {
-        static_assert(std::is_base_of_v<ast::Stmt, T>, "T must derive from ast::Stmt.");
+        // static_assert(std::is_base_of_v<ast::Stmt, T>, "T must derive from ast::Stmt.");
         return std::make_unique<T>(std::forward<Args>(args)...);
     }
 
     template <typename T>
     inline std::unique_ptr<T> makeStmtPtr(T&& s) const {
-        static_assert(std::is_base_of_v<ast::Stmt, T>, "T must derive from ast::Stmt.");
+        // static_assert(std::is_base_of_v<ast::Stmt, T>, "T must derive from ast::Stmt.");
         return std::make_unique<T>(std::move(s));
     }
 
-    size_t stringToSizeT(llvm::StringRef intLiteral) {
+    size_t stringToSizeT(llvm::StringRef NumberLiteral) {
         return 0;
     }
 
@@ -126,7 +127,7 @@ private:
 
     std::unique_ptr<ast::Stmt> parseNextStmt() {
         if (isPrefixOp(peekToken().getType()))
-            return parseExprStmt();
+            return parseExpr();
 
         switch (peekToken().getType()) {
             default:
@@ -139,7 +140,7 @@ private:
 
             case TokenType::Move:
             case TokenType::Identifier:
-                return parseExprStmt();
+                return parseExpr();
 
             case TokenType::Const:
             case TokenType::Let:
@@ -215,7 +216,7 @@ private:
         }
     }
 
-    std::unique_ptr<ast::ExprStmt> parsePrefix() {
+    std::unique_ptr<ast::Expr> parsePrefix() {
         llvm::outs() << "\nParsing Prefix\n";
 
         Token start = peekToken();
@@ -223,7 +224,7 @@ private:
 
         if (isPrefixOp(start.getType())) {
             llvm::outs() << "PrefixOperator\n";
-            std::unique_ptr<ast::ExprStmt> rhs = parseExprStmt(100);
+            std::unique_ptr<ast::Expr> rhs = parseExpr(100);
             if (!rhs) return nullptr;
 
             SrcSpan span(start.getStartLoc(), rhs->getEndLoc());
@@ -241,8 +242,8 @@ private:
                     start.getSpan(), start.getData()
                 );
             case TokenType::Int:
-                llvm::outs() << "IntLiteral\n";
-                return makeStmtPtr<ast::IntLiteral>(
+                llvm::outs() << "NumberLiteral\n";
+                return makeStmtPtr<ast::NumberLiteral>(
                     start.getSpan(), stringToSizeT(start.getData())
                 );
             case TokenType::Float:
@@ -252,13 +253,13 @@ private:
                 );
             case TokenType::Move: {
                 llvm::outs() << "Move\n";
-                std::unique_ptr<ast::ExprStmt> v = parseExprStmt(100);
+                std::unique_ptr<ast::Expr> v = parseExpr(100);
                 SrcSpan span(start.getStartLoc(), v->getEndLoc());
                 return makeStmtPtr<ast::MoveExpr>(std::move(span), std::move(v));
             }
             case TokenType::LParen: {
                 llvm::outs() << "Parenthesis\n";
-                std::unique_ptr<ast::ExprStmt> v = parseExprStmt(0);
+                std::unique_ptr<ast::Expr> v = parseExpr(0);
                 if (peekToken().isNot(TokenType::RParen)) {
                     llvm::outs() << "Unclosed '('.\n";
                     return nullptr;
@@ -270,7 +271,7 @@ private:
             case TokenType::Identifier: {
                 llvm::outs() << "Identifier\n";
                 if (peekToken().isNot(TokenType::LParen)) {
-                    return makeStmtPtr<ast::VarRef>(
+                    return makeStmtPtr<ast::NameExpr>(
                         start.getSpan(), start.getData()
                     );
                 }
@@ -282,10 +283,10 @@ private:
                     return makeStmtPtr<ast::CallExpr>(std::move(span), start.getData());
                 }
 
-                llvm::SmallVector<std::unique_ptr<ast::ExprStmt>> args;
-                llvm::StringMap<std::unique_ptr<ast::ExprStmt>> kwargs;
+                llvm::SmallVector<std::unique_ptr<ast::Expr>> args;
+                llvm::StringMap<std::unique_ptr<ast::Expr>> kwargs;
                 do {
-                    std::unique_ptr<ast::ExprStmt> arg = parseExprStmt();
+                    std::unique_ptr<ast::Expr> arg = parseExpr();
                     if (!arg) return nullptr;
 
                     args.push_back(std::move(arg));
@@ -309,10 +310,10 @@ private:
         }
     }
 
-    std::unique_ptr<ast::ExprStmt> parseExprStmt(int8_t minBP /*"BP" is binding power*/ = 0) {
-        llvm::outs() << "\nParsing ExprStmt\n";
+    std::unique_ptr<ast::Expr> parseExpr(int8_t minBP /*"BP" is binding power*/ = 0) {
+        llvm::outs() << "\nParsing Expr\n";
         
-        std::unique_ptr<ast::ExprStmt> lhs = parsePrefix();
+        std::unique_ptr<ast::Expr> lhs = parsePrefix();
         if (lhs == nullptr) return nullptr;
 
         while (true) {
@@ -334,7 +335,7 @@ private:
                 break;
 
             (void)nextToken();
-            std::unique_ptr<ast::ExprStmt> rhs = parseExprStmt(bp.rbp);
+            std::unique_ptr<ast::Expr> rhs = parseExpr(bp.rbp);
             if (!rhs) return nullptr;
 
             SrcSpan span(lhs->getStartLoc(), rhs->getStartLoc());
@@ -658,7 +659,7 @@ private:
         }
 
         (void)nextToken();
-        std::unique_ptr<ast::ExprStmt> value = parseExprStmt();
+        std::unique_ptr<ast::Expr> value = parseExpr();
 
         SrcSpan span(start, value->getEndLoc());
         return makeStmtPtr<ast::VarDecl>(
@@ -672,7 +673,7 @@ private:
         SrcLoc start = peekToken().getStartLoc();
 
         (void)nextToken(); // Skip leading "If" token
-        std::unique_ptr<ast::ExprStmt> condition = parseExprStmt();
+        std::unique_ptr<ast::Expr> condition = parseExpr();
         SrcSpan span(start, peekToken().getEndLoc());
 
         std::unique_ptr<ast::Stmt> body = parseStmtBody();
@@ -702,7 +703,7 @@ private:
         SrcLoc start = peekToken().getStartLoc();
 
         (void)nextToken(); // Skip leading "While" token
-        std::unique_ptr<ast::ExprStmt> condition = parseExprStmt();
+        std::unique_ptr<ast::Expr> condition = parseExpr();
         if (!condition) return nullptr;
 
         SrcSpan span(start, peekToken().getEndLoc());
@@ -719,7 +720,7 @@ private:
         SrcLoc start = peekToken().getStartLoc();
 
         (void)nextToken();
-        std::unique_ptr<ast::ExprStmt> value = parseExprStmt();
+        std::unique_ptr<ast::Expr> value = parseExpr();
 
         SrcSpan span(start, value->getEndLoc());
         return makeStmtPtr<ast::ReturnStmt>(std::move(span), std::move(value));
