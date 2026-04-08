@@ -6,9 +6,9 @@
 #include "llvm/Support/MemoryBufferRef.h"
 #include "llvm/Support/Error.h"
 
-#include "include/lexer/token.hpp"
-#include "include/lexer/utils.hpp"
-#include "include/io/source_location.hpp"
+#include "include/Lexer/Token.hpp"
+#include "include/Lexer/utils.hpp"
+#include "include/IO/SrcSpan.hpp"
 
 // TODO: Clean up comments
 
@@ -52,8 +52,13 @@ public:
         } else return lexOperatorOrPunct(); // Works as default, will return Unknown if invalid
     }
 private:
-    inline char peek() const { return Src[Offset]; }
-    inline void consume(size_t count) { Offset++; }
+    inline char peek() const {
+        return Src[Offset]; 
+    }
+
+    inline void consume(size_t count) {
+        Offset++;
+    }
 
     inline bool isEof() const {
         return Offset >= Src.size() - 1;
@@ -110,12 +115,14 @@ private:
         return Token(type, createSpan(start), Src.slice(start, Offset));
     }
 
+    // TODO: Implement
     Token lexStringLiteral() {
         assert(false && "String literals not yet supported.");
         return Token(TokenType::Unknown, createSpan(Offset));
     }
 
-    Token lexCharLiteral() {
+    // TODO: Implement
+    Token lexCharLiteral() { 
         assert(false && "Char literals not yet supported.");
         return Token(TokenType::Unknown, createSpan(Offset));
     }

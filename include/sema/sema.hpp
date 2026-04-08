@@ -1,122 +1,195 @@
 #pragma once
 
-#include <memory>
+#include "llvm/ADT/StringRef.h"
 
-#include "llvm/Support/raw_ostream.h" // For llvm::outs()
-
-#include "include/ast/stmt.hpp"
-#include "include/ast/module.hpp"
-#include "include/diag/diagnostic.hpp"
-#include "include/sema/scope.hpp"
+#include "include/Sema/Scope.hpp"
 
 namespace c {
 
 class Sema {
-private:
-    Diagnostic& Diag;
-    sema::TopLevelScope GlobalScope;
+
 public:
-    Sema(Diagnostic& diag)
-        : Diag(diag), GlobalScope() {}
+    bool analyze() {
 
-    bool analyzeModule(const Module& src) {
-        for (const std::unique_ptr<ast::Stmt>& stmt : src.getStmts()) {
-            switch (stmt->getStmtClass()) {
-                case ast::Stmt::SC_VarDecl:
-                    break;
-                case ast::Stmt::SC_TypeDecl:
-                    break;
-                case ast::Stmt::SC_FunctionDecl:
-                    break;
-            }
-        }
+    }
+
+    bool isTypeConvertable(const Type* from, const Type* to);
+
+    void lookupName();
+
+    void lookupLocal();
+
+    void lookupClosest();
+
+    bool analyzeDecl(ast::Decl* DC, sema::Scope* scope) {
+
+    }
+
+    bool analyzeStmt(ast::Stmt* ST, sema::Scope* scope) {
+
     }
 private:
+    ast::NamedDecl* lookupDeclInScope(ast::Decl::Kind kind, llvm::StringRef name, sema::Scope* scope) {
+        if (scope->isContainerDecl()) 
+            return scope->getEntity()->lookup(name).getKind(kind);
 
-    bool analyzeStmt(ast::Stmt& stmt) {
-        switch (stmt.getStmtClass()) {
-            
-        }
+        for (ast::NamedDecl* DC : scope->decls()) 
+            if (DC->getKind() == kind && DC->getName() == name)
+                return DC;
+
+        return nullptr;
     }
 
-    bool resolveType(ast::TypeExpr& stmt, sema::Scope* scope) {
-        std::optional<ast::TypeExpr*> type = scope->lookupType(stmt.getName());
-        if (!type.has_value()) {
-            llvm::outs() << "Undefined type.\n";
-            return true;
-        }
+    bool toBuiltinKind(llvm::StringRef name, BuiltinType::BuiltinKind& result) {
 
-        if (!stmt.isa(*type.value())) {
-            llvm::outs() << "Invalid type usage.\n";
-            return true;
-        }
+    }
 
-        if (!type.value()->isResolved()) {
-            assert(false && "Not Implemented.");
-        }
+    bool resolveTypeInfo(ast::TypeInfo* info, sema::Scope* scope) {
         
-        stmt.setResolved(type.value()->getResolved());
-        return false;
     }
 
-    bool analyzeTypeDecl(ast::TypeDecl& stmt, sema::Scope* scope) {
-        if (scope->lookupType(stmt.getName()).has_value()) {
-            llvm::outs() << "A type called '" << stmt.getName().str() << "' already exists.\n";
+    bool analyzeInitDecl(ast::InitDecl* DC, sema::Scope* scope, bool isVarDecl = false) {
+        if (findShadowingDecl(DC, scope)) {
+            llvm::outs() << "A variable called '" << DC->getName().str() << "' already exists.\n";
             return true;
         }
 
-        if (resolveType(*stmt.getTypeExpr(), scope))
-            return true;
-        
-        return false;
-    }
+        scope->pushDecl(DC);
 
-    bool analyzeVarDecl(ast::VarDecl& stmt, sema::Scope* scope) {
-        if (scope->lookupVariable(stmt.getName()).has_value()) {
-            llvm::outs() << "A variable called '" << stmt.getName().str() << "' already exists.\n";
-            return true;
-        }
-
-        if (stmt.isAutoTyped()) {
-            if (!stmt.isa<ast::CallExpr>()) {
-                llvm::outs() << "Only CallExpr can be automatically type evaluated.\n";
+        if (!DC->hasInit()) {
+            if (isVarDecl) {
+                llvm::outs() << "Variable declarations must have an init value.\n";
                 return true;
             }
 
-            // TODO: Implement sema method for CallExpr
-            assert(false && "Not implemented.");
+            if (DC->isAutoTyped()) {
+                llvm::outs() << "Automatically type evalueated Decl must have a value.\n";
+                return true;
+            }
+
             return false;
         }
 
-        if (resolveType(*stmt.getTypeExpr(), scope))
+        if () // FIXME: Analyze init value
             return true;
 
-        if (analyzeStmt(*stmt.getValue()))
+        if (DC->isAutoTyped()) {
+            if (DC->getInit()->isTypeDependant()) {
+                llvm::outs() << "Type dependant expression can't be automatically evaluated.\n";
+                return true;
+            }
+
+            // FIXME: Maybe check for void function call
+
+            DC->getTypeInfo()->setType(DC->getInit()->getType());
+            return false;
+        }
+
+        if (DC->getInit()->isTypeDependant()) {
+            // FIXME: 
+            llvm_unreachable("Currently no type dependant expressions (i think).");
+        } else if (isTypeConvertable(DC->getInit()->getType(), DC->getType())) {
+            llvm::outs() << "Invalid type conversion\n";
             return true;
-        
+        }
+
         return false;
     }
 
-    bool analyzeFunctionDecl(ast::FunctionDecl& stmt, sema::Scope* scope) {
-        if (stmt.hasReturn() && resolveType(*stmt.getTypeExpr(), scope)) {
-            llvm::outs() << "\n";
-            return true;
-        }
-        
-        
-    }
-
-    bool analyzeStructDecl(ast::StructDecl& stmt) {
-        if (GlobalScope.lookupStruct(stmt.getName()).has_value()) {
-            llvm::outs() << "A struct called '" << stmt.getName().str() << "' already exists.\n";
+    bool analyzeFuncionDecl(ast::FunctionDecl* DC, sema::Scope* scope) {
+        if (findShadowingDecl(DC, scope)) {
+            llvm::outs() << "A function called '" << DC->getName().str() << "' already exists.\n";
             return true;
         }
 
-        
-        for (std::unique_ptr<ast::VarDecl>& attr : stmt.getAttrs())
-            if (!)
+        scope->pushDecl(DC);
+
+        sema::Scope proto; // FIXME:
+        if (DC->hasParams())
+            for (ast::ParamDecl* param : DC->parameters()) {
+                if (analyzeInitDecl(param, &proto))
+                    return true;
+                proto.pushDecl(param);
+            }
+
+        if (!DC->isVoid() && resolveTypeInfo(DC->getTypeInfo(), &proto))
+            return true;
+    
+        if (analyzeBlockStmt(DC->getBody(), &proto))
+            return true;
+
+        return false;
     }
 
+    bool validate() {
+
+    }
+
+    bool analyzeTypeAliasDecl(ast::TypeAliasDecl* DC, sema::Scope* scope) {
+        BuiltinType::BuiltinKind _;
+        if (toBuiltinKind(DC->getName(), _)) {
+            llvm::outs() << "Type alias name conflicts with builtin.\n";
+            return true;
+        }
+
+        if (findShadowingDecl(DC, scope)) {
+            llvm::outs() << "A type called '" << DC->getName().str() << "' already exists.\n";
+            return true;
+        }
+
+        scope->pushDecl(DC);
+
+        if (resolveTypeInfo(DC->getTypeInfo(), scope))
+            return true;
+
+        return false;
+    }
+
+    bool analyzeStructDecl(ast::StructDecl* DC, sema::Scope* scope) {
+        if () {
+            
+        }
+
+        sema::Scope body; // FIXME:
+        for (ast::Decl* d : DC->decls()) {
+            if (auto FD = llvm::dyn_cast<ast::FieldDecl>(d)) {
+                if (analyzeInitDecl(FD, &body))
+                    return true;
+            } else if (auto TD = llvm::dyn_cast<ast::TypeAliasDecl>(d)) {
+                if (analyzeTypeAliasDecl(TD, &body))
+                    return true;
+            } else {
+                llvm::outs() << "Only field declarations and type aliases are allowed in struct declarations.\n";
+                return true;
+            }
+
+            // Can only be FieldDecl or TypeAliasDecl, which are both NamedDecl
+            body.pushDecl(llvm::cast<ast::NamedDecl>(d));
+        }
+
+        return false;
+    }
+
+    // FIXME:
+    bool analyzeBlockStmt(ast::BlockStmt* ST, sema::Scope* scope) {
+        sema::Scope body; // FIXME:
+        for (ast::Stmt* s : ST->stmts()) {
+            if (auto d = llvm::dyn_cast<ast::DeclStmt>(s)) {
+                if (!llvm::isa<ast::VarDecl>(d) || !llvm::isa<ast::TypeAliasDecl>(d)) {
+                    llvm::outs() << "Only variable declarations and type aliases are allowed in function bodies.\n";
+                    return true;
+                }
+
+                if (analyzeDecl(d->getDecl(), &body))
+                    return true;
+
+                body.pushDecl(d->getDecl());
+            } else if (analyzeStmt(s, &body))
+                return true;
+        }
+
+        return false;
+    }
 };
 
 } // namespace c

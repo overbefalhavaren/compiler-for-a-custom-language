@@ -1,57 +1,68 @@
 #pragma once
 
-#include <optional>
-
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
 
-#include "include/lexer/Lexer.hpp"
-#include "include/lexer/Token.hpp"
-#include "include/ast/Stmt.hpp"
-#include "include/ast/Expr.hpp"
-#include "include/ast/Module.hpp"
+#include "include/AST/Decl.hpp"
+#include "include/AST/Expr.hpp"
+#include "include/AST/Stmt.hpp"
+#include "include/AST/Type.hpp"
+#include "include/AST/TypeInfo.hpp"
+#include "include/Frontend/ASTAllocator.hpp"
+#include "include/IO/SrcSpan.hpp"
+#include "include/Lexer/Lexer.hpp"
 
 namespace c {
+namespace ast {
 
-// FIXME:
-// All things that have "arguments", i.e a list of statements like for example
-// arguments for a function or parameters in call expressions or types in a 
-// templated type have the problem(?) that a comma before the closing syntax is
-// allowed. Might want to look into dissallowing this. Example:
-// test(t, 1, 2,) // Here you see you can put a "," before the closing syntax ")"
 class Parser {
 private:
+    // Binding power for pratt parsing
     struct BindingPower {
         uint8_t lbp; // Left binding power
         uint8_t rbp; // Right binding power
     };
 
+    struct InitDeclInfo {
+        llvm::StringRef name;
+        TypeInfo* type;
+        Expr* init;
+
+        // This would've just worked anyway in C
+        // but this is C++ so here we are...
+        InitDeclInfo() = default;
+        InitDeclInfo(llvm::StringRef name, TypeInfo* type, Expr* init)
+            : name(name), type(type), init(init) {}
+
+        operator bool() {
+            return name.data() && type && init;
+        }
+    };
+
     Lexer LexerSource;
     Token CurrentToken;
+    ASTAllocator& Alloc;
 public:
-    Parser(Lexer&& lexer) 
-        : LexerSource(std::move(lexer)) {
-        // CurrentToken = lexer.next();
+    Parser(ASTAllocator& alloc, Lexer&& lexer)
+        : LexerSource(std::move(lexer)), Alloc(alloc) {
         (void)nextToken();
     }
     ~Parser() = default;
 
-    bool parseSourceFile(Module* result) {
+    bool parseSourceFile(ast::ModuleDecl& result) {
         if (peekToken().is(TokenType::Eof))
             return true;
- 
-        llvm::SmallVector<std::unique_ptr<ast::Stmt>> stmts;
-        do {
-            llvm::outs() << "loop\n";
-            std::unique_ptr<ast::Stmt> next = parseNextTopLevel();
-            if (!next) {
-                llvm::outs() << "Current token: " << strTokenType(peekToken().getType()) << "\n";
-                return true;
-            }
 
-            stmts.push_back(std::move(next));
-        } while (peekToken().isNot(TokenType::Eof));
-        *result = Module(LexerSource.getFileID(), std::move(stmts));
-        // new (result) ast::Module(LexerSource.getFileID(), std::move(stmts));
+        do {
+            ast::Decl* next = parseNextTopLevel();
+            if (!next) return true;
+
+            result.pushDecl(next);
+        } while (!peekToken().is(TokenType::Eof));
         return false;
     }
 private:
@@ -61,31 +72,87 @@ private:
 
     const Token& nextToken() {
         CurrentToken = LexerSource.next();
-        llvm::outs() << "nextToken() = \"" << strTokenType(peekToken().getType()) << "\"\n";
         return CurrentToken;
     }
 
-    template <typename T, typename... Args>
-    inline std::unique_ptr<T> makeStmtPtr(Args&&... args) const {
-        // static_assert(std::is_base_of_v<ast::Stmt, T>, "T must derive from ast::Stmt.");
-        return std::make_unique<T>(std::forward<Args>(args)...);
+    llvm::APInt stringToAPInt(llvm::StringRef numberLiteral) {
+        // FIXME: Implement
+        llvm_unreachable("Implement this function.");
     }
 
-    template <typename T>
-    inline std::unique_ptr<T> makeStmtPtr(T&& s) const {
-        // static_assert(std::is_base_of_v<ast::Stmt, T>, "T must derive from ast::Stmt.");
-        return std::make_unique<T>(std::move(s));
+    llvm::APFloat stringToAPFloat(llvm::StringRef floatLiteral) {
+        // FIXME: Implement
+        llvm_unreachable("Implement this function.");
     }
 
-    size_t stringToSizeT(llvm::StringRef NumberLiteral) {
-        return 0;
+    ast::BinaryOperator::OpKind getBinaryOperator(TokenType type) {
+        switch (type) {
+            default:
+                llvm_unreachable(""); // FIXME: Add message
+
+            case TokenType::Plus:
+                return ast::BinaryOperator::OpKind::Add;
+            case TokenType::Minus:
+                return ast::BinaryOperator::OpKind::Sub;
+            case TokenType::Star:
+                return ast::BinaryOperator::OpKind::Mul;
+            case TokenType::Slash:
+                return ast::BinaryOperator::OpKind::Div;
+            
+            case TokenType::Equal:
+                return ast::BinaryOperator::OpKind::Assign;
+            case TokenType::PlusEqual:
+                return ast::BinaryOperator::OpKind::AddAssign;
+            case TokenType::MinusEqual:
+                return ast::BinaryOperator::OpKind::SubAssign;
+            case TokenType::StarEqual:
+                return ast::BinaryOperator::OpKind::MulAssign;
+            case TokenType::SlashEqual:
+                return ast::BinaryOperator::OpKind::DivAssign;
+            
+            case TokenType::EqualEqual:
+                return ast::BinaryOperator::OpKind::Equal;
+            case TokenType::ExclEqual:
+                return ast::BinaryOperator::OpKind::NotEqual;
+            case TokenType::More:
+                return ast::BinaryOperator::OpKind::MoreThan;
+            case TokenType::Less:
+                return ast::BinaryOperator::OpKind::LessThan;
+            case TokenType::MoreEqual:
+                return ast::BinaryOperator::OpKind::MTEqual;
+            case TokenType::LessEqual:
+                return ast::BinaryOperator::OpKind::LTEqual;
+
+            case TokenType::AmpAmp:
+                return ast::BinaryOperator::OpKind::And;
+            case TokenType::PipePipe:
+                return ast::BinaryOperator::OpKind::Or;
+        }
+    }
+       
+    ast::UnaryOperator::OpKind getUnaryOperator(TokenType type) {
+        switch (type) {
+            default:
+                llvm_unreachable(""); // FIXME: Add message
+
+            case TokenType::Star:
+                return ast::UnaryOperator::OpKind::Deref;
+            case TokenType::Ampersand:
+                return ast::UnaryOperator::OpKind::AdressOf;
+            case TokenType::PlusPlus:
+                return ast::UnaryOperator::OpKind::AddOne;
+            case TokenType::MinusMinus:
+                return ast::UnaryOperator::OpKind::SubOne;
+            case TokenType::Plus:
+                return ast::UnaryOperator::OpKind::Plus;
+            case TokenType::Minus:
+                return ast::UnaryOperator::OpKind::Minus;
+            case TokenType::Exclamation:
+                return ast::UnaryOperator::OpKind::Not;
+        }
     }
 
-    double stringToDouble(llvm::StringRef floatLiteral) {
-        return 0.0;
-    }
-
-    std::unique_ptr<ast::Stmt> parseNextTopLevel() {
+    ast::Decl* parseNextTopLevel() {
         switch (peekToken().getType()) {
             default:
                 llvm::outs() << "Only variable, type, struct, impl and function declarations"
@@ -93,93 +160,68 @@ private:
                 llvm::outs() << "Currently: " << strTokenType(peekToken().getType()) << "\n"; 
                 return nullptr;
 
-            case TokenType::Unknown:
-                llvm::outs() << "Unknown token.\n";
-                return nullptr;
+            case TokenType::Type:
+                return parseTypeAliasDecl();
 
             case TokenType::Const:
             case TokenType::Let:
             case TokenType::Mut:
-                llvm::outs() << "VarDecl\n";
-                return parseVarDecl(false);
-
-            case TokenType::Type:
-                llvm::outs() << "TypeDecl\n";
-                return parseTypeDecl();
-
-            case TokenType::Enum:
-                llvm::outs() << "Enums are not yet supported\n";
-                return nullptr;
+                return parseVarDecl();
 
             case TokenType::Struct:
-                llvm::outs() << "StructDecl\n";
                 return parseStructDecl();
 
-            case TokenType::Impl:
-                llvm::outs() << "ImplDecl\n";
-                return parseImplDecl(std::nullopt);
-
             case TokenType::Fn:
-                llvm::outs() << "FunctionDecl\n";
-                return parseFunctionDecl(false);
+                return parseFunctionDecl();
         }
     }
 
-    std::unique_ptr<ast::Stmt> parseNextStmt() {
-        if (isPrefixOp(peekToken().getType()))
-            return parseExpr();
-
+    ast::Stmt* parseNextStmt() {
         switch (peekToken().getType()) {
             default:
                 llvm::outs() << "Unexpected token: '" << strTokenType(peekToken().getType()) << "'.\n";
                 return nullptr;
 
             case TokenType::Eof:
-                llvm::outs() << "Unclosed '{'.\n";
+                llvm::outs() << "Unclosed Scope.\n";
                 return nullptr;
 
-            case TokenType::Move:
-            case TokenType::Identifier:
-                return parseExpr();
+            case TokenType::Type:
+                ast::TypeAliasDecl* dc = parseTypeAliasDecl();
+                return Alloc.Create<ast::DeclStmt>(dc->getSpan(), dc); 
 
             case TokenType::Const:
             case TokenType::Let:
             case TokenType::Mut:
-                return parseVarDecl(false);
-
-            case TokenType::Type:
-                return parseTypeDecl();
+                ast::VarDecl* dc = parseVarDecl();
+                return Alloc.Create<ast::DeclStmt>(dc->getSpan(), dc);
 
             case TokenType::If:
                 return parseIfStmt();
-            case TokenType::Match:
-                llvm::outs() << "'match' (switch) statements are not yet supported.\n";
-                return nullptr;
-
             case TokenType::While:
                 return parseWhileStmt();
-            case TokenType::For:
-                llvm::outs() << "'for' loops are not yet supported.\n";
-                return nullptr;
-
             case TokenType::Return:
                 return parseReturnStmt();
         }
     }
 
-    bool isPrefixOp(TokenType t) {
+    bool isPrefixUnaryOp(TokenType t) {
         return t == TokenType::Exclamation ||   // Not
-               t == TokenType::Minus ||         // Negative numer
+               t == TokenType::Plus ||          // Positive number
+               t == TokenType::Minus ||         // Negative number
                t == TokenType::Star ||          // Get pointer value
-               t == TokenType::Ampersand;       // Get pointer
+               t == TokenType::Ampersand;       // Get adress
     }
 
-    bool isSuffixOp(TokenType t) {
+    bool isSuffixUnaryOp(TokenType t) {
         return t == TokenType::PlusPlus || t == TokenType::MinusMinus;
     }
 
     BindingPower getBindingPower(TokenType op) {
         switch (op) {
+            default:
+                return BindingPower(0, 0);
+
             case TokenType::Star:
             case TokenType::Slash:
                 return {70, 71};
@@ -198,9 +240,9 @@ private:
             case TokenType::ExclEqual:
                 return {45, 46};
 
-            case TokenType::LogAND:
+            case TokenType::AmpAmp:
                 return {30, 31};
-            case TokenType::LogOR:
+            case TokenType::PipePipe:
                 return {20, 21};
 
             // Assignment (right associative)
@@ -210,119 +252,98 @@ private:
             case TokenType::StarEqual:
             case TokenType::SlashEqual:
                 return {10, 9};
-
-            default:
-                return BindingPower(0, 0);
         }
     }
 
-    std::unique_ptr<ast::Expr> parsePrefix() {
-        llvm::outs() << "\nParsing Prefix\n";
-
+    ast::Expr* parsePrefix() {
         Token start = peekToken();
         (void)nextToken();
 
-        if (isPrefixOp(start.getType())) {
-            llvm::outs() << "PrefixOperator\n";
-            std::unique_ptr<ast::Expr> rhs = parseExpr(100);
+        if (isPrefixUnaryOp(start.getType())) {
+            ast::Expr* rhs = parseExpr(100);
             if (!rhs) return nullptr;
 
             SrcSpan span(start.getStartLoc(), rhs->getEndLoc());
-            return makeStmtPtr<ast::UnaryOperator>(span, start.getType(), std::move(rhs));
+            return Alloc.Create<ast::UnaryOperator>(
+                span, getUnaryOperator(start.getType()), rhs
+            );
         }
 
         switch (start.getType()) {
             default:
                 llvm::outs() << "Invalid token: " << strTokenType(start.getType()) << ".\n";
                 return nullptr;
-            
-            case TokenType::String:
-                llvm::outs() << "StringLiteral\n";
-                return makeStmtPtr<ast::StringLiteral>(
-                    start.getSpan(), start.getData()
-                );
+
             case TokenType::Int:
-                llvm::outs() << "NumberLiteral\n";
-                return makeStmtPtr<ast::NumberLiteral>(
-                    start.getSpan(), stringToSizeT(start.getData())
+                return Alloc.Create<ast::IntegerLiteral>(
+                    peekToken().getSpan(), stringToAPInt(peekToken().getData())
                 );
             case TokenType::Float:
-                llvm::outs() << "FloatLiteral\n";
-                return makeStmtPtr<ast::FloatLiteral>(
-                    start.getSpan(), stringToDouble(start.getData())
+                return Alloc.Create<ast::FloatingLiteral>(
+                    peekToken().getSpan(), stringToAPFloat(peekToken().getData())
                 );
-            case TokenType::Move: {
-                llvm::outs() << "Move\n";
-                std::unique_ptr<ast::Expr> v = parseExpr(100);
-                SrcSpan span(start.getStartLoc(), v->getEndLoc());
-                return makeStmtPtr<ast::MoveExpr>(std::move(span), std::move(v));
-            }
             case TokenType::LParen: {
-                llvm::outs() << "Parenthesis\n";
-                std::unique_ptr<ast::Expr> v = parseExpr(0);
+                ast::Expr* result = parseExpr(0);
                 if (peekToken().isNot(TokenType::RParen)) {
                     llvm::outs() << "Unclosed '('.\n";
                     return nullptr;
                 }
 
                 (void)nextToken();
-                return v;
+                return result;
             }
             case TokenType::Identifier: {
-                llvm::outs() << "Identifier\n";
                 if (peekToken().isNot(TokenType::LParen)) {
-                    return makeStmtPtr<ast::NameExpr>(
+                    return Alloc.Create<ast::VarDeclRef>(
                         start.getSpan(), start.getData()
                     );
                 }
-                
-                if (nextToken().is(TokenType::RParen)) {
-                    SrcSpan span(start.getStartLoc(), peekToken().getEndLoc());
 
-                    (void)nextToken();
-                    return makeStmtPtr<ast::CallExpr>(std::move(span), start.getData());
-                }
+                llvm::SmallVector<Expr*> args;
+                if (nextToken().isNot(TokenType::RParen))
+                    while (true) {
+                        if (peekToken().is(TokenType::Eof)) {
+                            llvm::outs() << "Unclosed function call. Expected ')'.\n";
+                            return nullptr;
+                        }
 
-                llvm::SmallVector<std::unique_ptr<ast::Expr>> args;
-                llvm::StringMap<std::unique_ptr<ast::Expr>> kwargs;
-                do {
-                    std::unique_ptr<ast::Expr> arg = parseExpr();
-                    if (!arg) return nullptr;
+                        Expr* next = parseExpr();
+                        if (!next) return nullptr;
 
-                    args.push_back(std::move(arg));
+                        args.push_back(next);
 
-                    if (peekToken().isNot(TokenType::Comma)) {
-                        if (peekToken().is(TokenType::RParen))
+                        if (peekToken().is(TokenType::RParen)) {
                             break;
-
-                        llvm::outs() << "Function arguments need to be separated by a ','.\n";
-                        return nullptr;
+                        } else if (peekToken().is(TokenType::Comma)) 
+                            if (nextToken().is(TokenType::RParen)) {
+                                llvm::outs() << "Unnessesary ','.\n";
+                                return nullptr;
+                            }
+                        
+                        (void)nextToken();
                     }
-                } while (nextToken().isNot(TokenType::RParen));
                 
                 SrcSpan span(start.getStartLoc(), peekToken().getEndLoc());
+                CallExpr* result = Alloc.Create<ast::CallExpr>(span, start.getData());
+                result->setArguments(std::move(args));
 
                 (void)nextToken();
-                return makeStmtPtr<ast::CallExpr>(
-                    std::move(span), start.getData(), std::move(args), std::move(kwargs)
-                );
+                return result;
             }
         }
     }
 
-    std::unique_ptr<ast::Expr> parseExpr(int8_t minBP /*"BP" is binding power*/ = 0) {
-        llvm::outs() << "\nParsing Expr\n";
-        
-        std::unique_ptr<ast::Expr> lhs = parsePrefix();
-        if (lhs == nullptr) return nullptr;
+    ast::Expr* parseExpr(int8_t minBP = 0) {
+        ast::Expr* lhs = parsePrefix();
+        if (!lhs) return nullptr;
 
         while (true) {
             if (!peekToken().isOperator()) {
                 break;
-            } else if (isSuffixOp(peekToken().getType())) {
+            } else if (isSuffixUnaryOp(peekToken().getType())) {
                 SrcSpan span(lhs->getStartLoc(), peekToken().getEndLoc());
-                lhs = makeStmtPtr<ast::UnaryOperator>(
-                    std::move(span), peekToken().getType(), std::move(lhs)
+                lhs = Alloc.Create<ast::UnaryOperator>(
+                    span, getUnaryOperator(peekToken().getType()), lhs
                 );
 
                 (void)nextToken();
@@ -331,73 +352,34 @@ private:
 
             TokenType op = peekToken().getType();
             BindingPower bp = getBindingPower(op);
-            if (bp.lbp < minBP) 
+            if (bp.lbp < minBP)
                 break;
 
             (void)nextToken();
-            std::unique_ptr<ast::Expr> rhs = parseExpr(bp.rbp);
+            ast::Expr* rhs = parseExpr(bp.rbp);
             if (!rhs) return nullptr;
 
             SrcSpan span(lhs->getStartLoc(), rhs->getStartLoc());
-            lhs = makeStmtPtr<ast::BinaryOperator>(std::move(span), op, std::move(lhs), std::move(rhs));
+            lhs = Alloc.Create<ast::BinaryOperator>(
+                span, getBinaryOperator(op), lhs, rhs
+            );
         }
 
         return lhs;
     }
 
-    // TODO: Debug this
-    std::unique_ptr<ast::TypeExpr> parseTypeExpr() {
-        llvm::outs() << "\nParsing TypeRef\n";
-
+    ast::TypeInfo* parseTypeRef() {
         if (peekToken().isNot(TokenType::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
             return nullptr;
         }
 
-        Token start = peekToken();
-        std::unique_ptr<ast::TypeExpr> result;
-        if (nextToken().is(TokenType::Less)) {
-            llvm::SmallVector<std::unique_ptr<ast::TypeExpr>> types;
-            while (nextToken().isNot(TokenType::More)) {
-                std::unique_ptr<ast::TypeExpr> t = parseTypeExpr();
-                if (!t) return nullptr;
-
-                types.push_back(std::move(t));
-                if (nextToken().isNot(TokenType::Comma)) {
-                    if (peekToken().is(TokenType::More))
-                        break;
-                    
-                    llvm::outs() << "Template types need to be separated by a ','.\n";
-                    return nullptr;
-                }
-            }
-
-            SrcSpan span(start.getStartLoc(), peekToken().getEndLoc());
-
-            (void)nextToken();
-            result = makeStmtPtr<ast::TemplateTypeExpr>(
-                std::move(span), start.getData(), std::move(types)
-            );
-        } else 
-            std::unique_ptr<ast::TypeExpr> result = makeStmtPtr<ast::NamedTypeExpr>(
-                start.getSpan(), start.getData()
-            );
-
-        if (peekToken().is(TokenType::Star)) {
-            do {
-                SrcSpan span(start.getStartLoc(), peekToken().getEndLoc());
-                result = makeStmtPtr<ast::PointerTypeExpr>(
-                    std::move(span), std::move(result)
-                );
-            } while (nextToken().is(TokenType::Star));
-        }
-        
-        return result;
+        return Alloc.Create<ast::TypeInfo>(ast::TypeInfo::CreateNamed(
+            peekToken().getSpan(), peekToken().getData()
+        ));
     }
 
-    std::unique_ptr<ast::TypeDecl> parseTypeDecl() {
-        llvm::outs() << "\nParsing TypeDecl\n";
-
+    ast::TypeAliasDecl* parseTypeAliasDecl() {
         // The first token will always be TokenType::Type
         SrcLoc start = peekToken().getStartLoc();
         if (nextToken().isNot(TokenType::Identifier)) {
@@ -411,16 +393,138 @@ private:
             return nullptr;
         }
 
-        std::unique_ptr<ast::TypeExpr> type = parseTypeExpr();
-
+        ast::TypeInfo* type = parseTypeRef();
+        if (!type) return nullptr;
+        
         (void)nextToken();
         SrcSpan span(start, type->getEndLoc());
-        return makeStmtPtr<ast::TypeDecl>(std::move(span), name, std::move(type));
+        return Alloc.Create<ast::TypeAliasDecl>(span, name, type);
     }
-    
-    std::unique_ptr<ast::FunctionDecl> parseFunctionDecl(bool isMethodAndIsPublic) {
-        llvm::outs() << "\nParsing FunctionDecl\n";
 
+    // FIXME: Init value should only be required for variables
+    InitDeclInfo parseInitDecl() {
+        if (peekToken().isNot(TokenType::Identifier)) {
+            llvm::outs() << "Expected identifier.\n";
+            return {};
+        }
+        llvm::StringRef name = peekToken().getData();
+
+        ast::TypeInfo* type = nullptr;
+        if (nextToken().is(TokenType::Colon)) {
+            (void)nextToken();
+            type = parseTypeRef();
+            if (!type) return {};
+
+            if (peekToken().isNot(TokenType::Equal)) {
+                llvm::outs() << "Expected '='.\n";
+                return {};
+            }
+        } else if (peekToken().isNot(TokenType::Equal)) {
+            llvm::outs() << "Expected ':' or '='.\n";
+            return {};
+        }
+
+        (void)nextToken();
+        ast::Expr* init = parseExpr();
+        if (!init) return {};
+        
+        return InitDeclInfo(name, type, init);
+    }
+
+    ast::VarDecl* parseVarDecl() {
+        SrcLoc start = peekToken().getStartLoc();
+        ast::VarDecl::Mutability mut;
+        switch (peekToken().getType()) {
+            default:
+                llvm_unreachable(""); // FIXME: Add message
+            
+            case TokenType::Const:
+                mut = VarDecl::Constant;
+                break;
+            case TokenType::Let:
+                mut = VarDecl::Immutable;
+                break;
+            case TokenType::Mut:
+                mut = VarDecl::Mutable;
+                break;
+        }
+
+        (void)nextToken();
+        InitDeclInfo info = parseInitDecl();
+        if (!info) return nullptr;
+
+
+
+        SrcSpan span(start, info.init->getEndLoc());
+        return Alloc.Create<ast::VarDecl>(span, info.name, mut, info.type, info.init);
+    }
+
+    ast::ParamDecl* parseParamDecl() {
+        SrcLoc start = peekToken().getStartLoc();
+        ast::ParamDecl::Mutability mut = ast::ParamDecl::ImmutableReference;
+        if (nextToken().isNot(TokenType::Identifier)) {
+            if (peekToken().is(TokenType::Mut)) {
+                mut = ast::ParamDecl::MutableReference;
+            } else if (peekToken().is(TokenType::Move)) {
+                mut = ast::ParamDecl::MovedValue;
+            } else
+                llvm_unreachable(""); // FIXME: Add message
+        }
+
+        InitDeclInfo info = parseInitDecl();
+        if (!info) return nullptr;
+
+        SrcSpan span(start, info.init->getEndLoc());
+        return Alloc.Create<ast::ParamDecl>(span, info.name, mut, info.type, info.init);
+    }
+
+    ast::FieldDecl* parseFieldDecl(size_t idx) {
+        SrcLoc start = peekToken().getStartLoc();
+
+        (void)nextToken();
+        InitDeclInfo info = parseInitDecl();
+        if (!info) return nullptr;
+
+        SrcSpan span(start, peekToken().getEndLoc());
+        return Alloc.Create<FieldDecl>(span, info.name, idx, info.type, info.init);
+    }
+
+    ast::StructDecl* parseStructDecl() {
+        SrcLoc start = peekToken().getStartLoc();
+        if (nextToken().isNot(TokenType::Identifier)) {
+            llvm::outs() << "Expected identifier.\n";
+            return nullptr;
+        }
+        llvm::StringRef name = peekToken().getData();
+
+        if (nextToken().isNot(TokenType::Colon)) {
+            llvm::outs() << "Expected ':'.\n";
+            return nullptr;
+        }
+
+        ast::StructDecl decl(name);
+        llvm::SmallVector<FieldDecl*> fields;
+        while (nextToken().isNot(TokenType::End)) {
+            if (peekToken().is(TokenType::Eof)) {
+                llvm::outs() << "Unclosed struct declaration. Expected 'end'.\n";
+                return nullptr;
+            }
+
+            FieldDecl* next = parseFieldDecl(fields.size());
+            if (!next) return nullptr;
+
+            fields.push_back(next);
+            decl.pushDecl(next);
+        }
+
+        decl.setFields(std::move(fields));
+        decl.setSpan(SrcSpan(std::move(start), peekToken().getEndLoc()));
+
+        (void)nextToken();
+        return Alloc.Create<StructDecl>(std::move(decl));
+    }
+
+    ast::FunctionDecl* parseFunctionDecl() {
         // The first token will always be TokenType::Fn 
         SrcLoc start = peekToken().getStartLoc();
         if (nextToken().isNot(TokenType::Identifier)) {
@@ -434,325 +538,150 @@ private:
             return nullptr;
         }
 
-        llvm::SmallVector<std::unique_ptr<ast::VarDecl>> args;
-        while (nextToken().isNot(TokenType::RParen)) {
-            switch (peekToken().getType()) {
-                default:
-                    llvm::outs() << "Invalid function arg declarator.\n";
+        ast::FunctionDecl decl(name);
+        llvm::SmallVector<ParamDecl*> params;
+        if (nextToken().isNot(TokenType::RParen))
+            while (true) {
+                if (peekToken().is(TokenType::Eof)) {
+                    llvm::outs() << "Unclosed function declaration. Expected ')'.\n";
                     return nullptr;
+                }
 
-                case TokenType::Eof:
-                    llvm::outs() << "Incomplete function declaration.\n";
-                    return nullptr;
+                ParamDecl* next = parseParamDecl();
+                if (!next) return nullptr;
 
-                case TokenType::Const:
-                    llvm::outs() << "Function argument cannot be const.\n";
-                    return nullptr;
+                params.push_back(next);
+                decl.pushDecl(next);
 
-                case TokenType::Let:
-                case TokenType::Mut:
-                case TokenType::Move:
-                    std::unique_ptr<ast::VarDecl> a = parseVarDecl(false);
-                    if (!a) return nullptr;
-
-                    args.push_back(std::move(a));
+                if (peekToken().is(TokenType::RParen)) {
                     break;
-            }
-
-            if (peekToken().isNot(TokenType::Comma)) {
-                if (peekToken().is(TokenType::RParen))
-                    break;
-
-                llvm::outs() << "Function arguments need to be separated by a ','.\n";
-                return nullptr;
-            }
-        }
-
-        if (nextToken().isNot(TokenType::Arrow)) {
-            llvm::outs() << "Expected '->'.\n";
-            return nullptr;
-        }
-
-        (void)nextToken();
-        std::unique_ptr<ast::TypeExpr> type = parseTypeExpr();
-        if (!type) return nullptr;
-
-        SrcLoc end = peekToken().getEndLoc();
-
-        if (peekToken().isNot(TokenType::LBrace)) {
-            llvm::outs() << "Unclosed '{'.\n";
-            return nullptr;
-        }
-        std::unique_ptr<ast::BlockStmt> body = parseBlockStmt();
-        if (!body) return nullptr;
-
-        SrcSpan span(start, end);
-        return makeStmtPtr<ast::FunctionDecl>(
-            std::move(span), name, std::move(type), std::move(body), std::move(args)
-        );
-    }
-
-    // TODO: Debug this
-    std::unique_ptr<ast::ImplDecl> parseImplDecl(std::optional<llvm::StringRef> structName) {
-        llvm::outs() << "\nParsing ImplDecl\n";
-
-        SrcLoc start = peekToken().getStartLoc();
-
-        llvm::StringRef name;
-        if (!structName.has_value()) {
-            if (nextToken().isNot(TokenType::Identifier)) {
-                llvm::outs() << "Expected identifier.\n";
-                return nullptr;
-            }
-            name = peekToken().getData();
-            
-            if (nextToken().isNot(TokenType::LBrace)) {
-                llvm::outs() << "Expected '{'.\n";
-                return nullptr;
-            }
-        } else name = structName.value();
-
-        SrcLoc end = peekToken().getEndLoc();
-
-        llvm::SmallVector<std::unique_ptr<ast::FunctionDecl>> methods;
-        while (nextToken().isNot(TokenType::RBrace) && peekToken().isNot(TokenType::Eof)) {
-            bool is_public = false;
-            if (peekToken().is(TokenType::Pub)) {
-                (void)nextToken();
-                is_public = true;
-            }
-
-            if (peekToken().isNot(TokenType::Fn)) {
-                if (peekToken().is(TokenType::RBrace) || peekToken().is(TokenType::Eof))
-                    break;
-                
-                llvm::outs() << "Expected function declarator.\n";
-                return nullptr;
-            }
-
-            std::unique_ptr<ast::FunctionDecl> method = parseFunctionDecl(is_public);
-            if (!method) return nullptr;
-
-            methods.push_back(std::move(method));
-        }
-
-        SrcSpan span(start, end);
-        return makeStmtPtr<ast::ImplDecl>(span, name, std::move(methods));
-    }
-
-    // TODO: Debug this
-    std::unique_ptr<ast::StructDecl> parseStructDecl() {
-        llvm::outs() << "\nParsing StructDecl\n";
-
-        SrcLoc start = peekToken().getStartLoc();
-        if (nextToken().isNot(TokenType::Identifier)) {
-            llvm::outs() << "Expected identifier.\n";
-            return nullptr;
-        }
-        llvm::StringRef name = peekToken().getData();
-
-        if (nextToken().isNot(TokenType::LBrace)) {
-            llvm::outs() << "Expected '{'.\n";
-            return nullptr;
-        }
-
-        llvm::SmallVector<std::unique_ptr<ast::VarDecl>> attrs;
-        while (nextToken().isNot(TokenType::RParen)) {
-            bool is_public = false;
-            if (peekToken().is(TokenType::Pub)) {
-                (void)nextToken();
-                is_public = true;
-            }
-
-            switch (peekToken().getType()) {
-                default:
-                    llvm::outs() << "Invalid struct attr declarator.\n";
-                    return nullptr;
-
-                case TokenType::Eof:
-                    llvm::outs() << "Incomplete attribute declaration.\n";
-                    return nullptr;
-
-                case TokenType::Const:
-                    llvm::outs() << "Struct attributes cannot be const.\n";
-                    return nullptr;
-                
-                case TokenType::Move:
-                    llvm::outs() << "Struct attributes cannot be move.\n";
-                    return nullptr;
-
-                case TokenType::Let:
-                case TokenType::Mut:
-                    std::unique_ptr<ast::VarDecl> a = parseVarDecl(is_public);
-                    if (!a) return nullptr;
-
-                    attrs.push_back(std::move(a));
-                    break;
-            }
-        }
-
-        if (!peekToken().is(TokenType::RBrace)) {
-            llvm::outs() << "Expected '}'.\n";
-            return nullptr;
-        }
-        
-        SrcLoc end = peekToken().getEndLoc();
-
-        std::unique_ptr<ast::ImplDecl> impl;
-        llvm::SmallVector<std::unique_ptr<ast::ImplRef>> inherited;
-        if (nextToken().is(TokenType::Impl)) {
-            if (nextToken().isNot(TokenType::Identifier)) {
-                llvm::outs() << "Expected identifier.\n";
-                return nullptr;
-            }
-            llvm::StringRef impl_name = peekToken().getData();
-
-            if (nextToken().is(TokenType::From)) {
-                (void)nextToken();
-                do {
-                    if (peekToken().is(TokenType::Identifier)) {
-                        inherited.push_back(makeStmtPtr<ast::ImplRef>(
-                            peekToken().getSpan(), peekToken().getData()
-                        ));
-                    } else {
-                        llvm::outs() << "Expected identifier.\n";
+                } else if (peekToken().is(TokenType::Comma)) 
+                    if (nextToken().is(TokenType::RParen)) {
+                        llvm::outs() << "Unnessesary ','.\n";
                         return nullptr;
                     }
-                } while (nextToken().isNot(TokenType::LBrace));
-            } else if (peekToken().isNot(TokenType::LBrace)) {
-                llvm::outs() << "Expected '{' or 'from'.\n";
-                return nullptr;
+                
+                (void)nextToken();
             }
 
-            impl = parseImplDecl(impl_name);
-            if (!impl) return nullptr;
-        }
+        // Ends the function declaration at the closing ")" in case
+        // in case the function doesn't have a return type.
+        SrcLoc end = peekToken().getEndLoc();
 
-        SrcSpan span(start, end);
-        return makeStmtPtr<ast::StructDecl>(span, name, std::move(attrs), std::move(impl), std::move(inherited));
-    }
+        if (nextToken().is(TokenType::Arrow)) {
+            (void)nextToken();
+            ast::TypeInfo* type = parseTypeRef();
+            if (!type) return nullptr;
 
-    std::unique_ptr<ast::VarDecl> parseVarDecl(bool isAttrAndIsPublic) {
-        llvm::outs() << "\nParsing VarDecl\n";
-
-        SrcLoc start = peekToken().getStartLoc();
-        TokenType kind = peekToken().getType();
-
-        if (nextToken().isNot(TokenType::Identifier)) {
-            llvm::outs() << "Expected identifier.\n";
+            end = peekToken().getEndLoc();
+            decl.setTypeInfo(type);
+        } else if (peekToken().isNot(TokenType::Colon)) {
+            llvm::outs() << "Expected '->' or ':'.\n";
             return nullptr;
         }
-        llvm::StringRef name = peekToken().getData();
 
-        std::unique_ptr<ast::TypeExpr> type;
-        if (nextToken().is(TokenType::Colon)) {
-            (void)nextToken();
-            type = parseTypeExpr();
+        decl.setSpan(SrcSpan(std::move(start), std::move(end)));
 
-            if (peekToken().isNot(TokenType::Equal)) {
-                llvm::outs() << "Expected '='.\n";
-                return nullptr;
-            }
-        } else if (peekToken().isNot(TokenType::Equal)) {
-            llvm::outs() << "Expected ':' or '='.\n";
+        // Check if a scope for the function is created here since
+        // abstract functions don't have scopes and calling 
+        // parseBlockStmt will therefore cause an error message
+        // even though there shouldn't be one.
+        if (peekToken().is(TokenType::Colon)) {
+            ast::BlockStmt* body = parseBlockStmt();
+            if (!body) return nullptr;
+
+            decl.setBody(std::move(body));
+        }
+
+        return Alloc.Create<ast::FunctionDecl>(std::move(decl));
+    }
+
+    ast::BlockStmt* parseBlockStmt() {
+        SrcLoc start = peekToken().getStartLoc();
+
+        if (peekToken().is(TokenType::Colon)) {
+            llvm::outs() << "Expected ':'.\n";
             return nullptr;
         }
 
         (void)nextToken();
-        std::unique_ptr<ast::Expr> value = parseExpr();
+        llvm::SmallVector<ast::Stmt*> stmts;
+        while (peekToken().isNot(TokenType::End)) {
+            if (peekToken().is(TokenType::Eof)) {
+                llvm::outs() << "Unclosed ':'\n";
+                return nullptr;
+            }
 
-        SrcSpan span(start, value->getEndLoc());
-        return makeStmtPtr<ast::VarDecl>(
-            std::move(span), name, kind, std::move(type), std::move(value)
-        );
-    }
+            ast::Stmt* next = parseNextStmt();
+            if (!next) return nullptr;
 
-    std::unique_ptr<ast::IfStmt> parseIfStmt() {
-        llvm::outs() << "\nParsing IfStmt\n";
-
-        SrcLoc start = peekToken().getStartLoc();
-
-        (void)nextToken(); // Skip leading "If" token
-        std::unique_ptr<ast::Expr> condition = parseExpr();
-        SrcSpan span(start, peekToken().getEndLoc());
-
-        std::unique_ptr<ast::Stmt> body = parseStmtBody();
-
-        std::unique_ptr<ast::IfStmt> else_stmt;
-        if (peekToken().is(TokenType::Elif)) {
-            else_stmt = parseIfStmt();
-        } else if (peekToken().is(TokenType::Else)) {
-            SrcLoc else_start = peekToken().getStartLoc();
-
-            (void)nextToken();
-            std::unique_ptr<ast::Stmt> else_body = parseStmtBody();
-            SrcSpan else_span(else_start, peekToken().getEndLoc());
-            else_stmt = makeStmtPtr<ast::IfStmt>(
-                std::move(else_span), nullptr, std::move(else_body), nullptr
-            );
+            stmts.push_back(next);
         }
 
-        return makeStmtPtr<ast::IfStmt>(
-            std::move(span), std::move(condition), std::move(body), std::move(else_stmt)
-        );
-    }
-
-    std::unique_ptr<ast::WhileStmt> parseWhileStmt() {
-        llvm::outs() << "\nParsing WhileStmt\n";
-
-        SrcLoc start = peekToken().getStartLoc();
-
-        (void)nextToken(); // Skip leading "While" token
-        std::unique_ptr<ast::Expr> condition = parseExpr();
-        if (!condition) return nullptr;
-
         SrcSpan span(start, peekToken().getEndLoc());
 
-        std::unique_ptr<ast::Stmt> body = parseStmtBody();
-        if (!body) return nullptr;
-
-        return makeStmtPtr<ast::WhileStmt>(
-            std::move(span), std::move(condition), std::move(body)
-        );
-    }
-
-    std::unique_ptr<ast::ReturnStmt> parseReturnStmt() {
-        SrcLoc start = peekToken().getStartLoc();
-
         (void)nextToken();
-        std::unique_ptr<ast::Expr> value = parseExpr();
-
-        SrcSpan span(start, value->getEndLoc());
-        return makeStmtPtr<ast::ReturnStmt>(std::move(span), std::move(value));
+        return Alloc.Create<ast::BlockStmt>(span, std::move(stmts));
     }
 
-    std::unique_ptr<ast::Stmt> parseStmtBody() {
-        llvm::outs() << "\nParsing StmtBody\n";
-
-        if (peekToken().is(TokenType::LBrace))
+    ast::Stmt* parseStmtBody() {
+        if (peekToken().is(TokenType::Colon))
             return parseBlockStmt();
         return parseNextStmt();
     }
 
-    std::unique_ptr<ast::BlockStmt> parseBlockStmt() {
-        llvm::outs() << "\nParsing BlockStmt\n";
-
+    ast::IfStmt* parseIfStmt() {
         SrcLoc start = peekToken().getStartLoc();
 
-        (void)nextToken(); // Skip the leading "{" token
-        llvm::SmallVector<std::unique_ptr<ast::Stmt>> stmts;
-        while (peekToken().isNot(TokenType::RBrace)) {
-            std::unique_ptr<ast::Stmt> next = parseNextStmt();
-            if (!next) return nullptr;
-
-            stmts.push_back(std::move(next));
-        }
+        (void)nextToken(); // Skip leading If token
+        ast::Expr* cond = parseExpr();
+        if (!cond) return nullptr;
 
         SrcSpan span(start, peekToken().getEndLoc());
 
-        (void)nextToken();
-        return makeStmtPtr<ast::BlockStmt>(std::move(span), std::move(stmts));
+        ast::Stmt* body = parseStmtBody();
+        if (!body) return nullptr;
+
+        // else_stmt will be IfStmt* if there's an elif
+        // eles_stmt will be BlockStmt* or Stmt* if there's and else statement
+        ast::Stmt* else_stmt = nullptr;
+        if (peekToken().is(TokenType::Elif)) {
+            else_stmt = parseIfStmt();
+            if (!else_stmt) return nullptr;
+        } else if (peekToken().is(TokenType::Else)) {
+            (void)nextToken(); // Skip over the leading Else token
+            else_stmt = parseStmtBody();
+            if (!else_stmt) return nullptr;
+        }
+
+        return Alloc.Create<ast::IfStmt>(span, cond, body, else_stmt);
+    }
+
+    ast::WhileStmt* parseWhileStmt() {
+        SrcLoc start = peekToken().getStartLoc();
+
+        (void)nextToken(); // Skip leading "While" token
+        ast::Expr* cond = parseExpr();
+        if (!cond) return nullptr;
+
+        SrcSpan span(start, peekToken().getEndLoc());
+
+        ast::Stmt* body = parseStmtBody();
+        if (!body) return nullptr;
+
+        return Alloc.Create<ast::WhileStmt>(span, cond, body);
+    }
+
+    ast::ReturnStmt* parseReturnStmt() {
+        SrcLoc start = peekToken().getStartLoc();
+
+        (void)nextToken(); // Skip the leading Else token
+        ast::Expr* value = parseExpr();
+
+        SrcSpan span(start, value->getEndLoc());
+        return Alloc.Create<ast::ReturnStmt>(span, value);
     }
 };
 
+} // namespace ast
 } // namespace c

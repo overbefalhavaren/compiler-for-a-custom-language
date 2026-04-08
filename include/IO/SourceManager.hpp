@@ -2,7 +2,7 @@
 
 namespace c {
 
-class Diagnostic {
+class SourceManager {
 
 };
 

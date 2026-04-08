@@ -1,109 +1,223 @@
 #pragma once
 
-#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Casting.h"
+
+// Again because intellisense is retarded.
+namespace c {
+namespace ast {
+class StructDecl; // include/AST/Decl.hpp
+} // namespace ast
+} // namespace c
 
 namespace c {
 
-bool isBuiltinType(llvm::StringRef name) {
-    return BuiltinType::toBuiltinKind(name).has_value();
-}
-
 class Type {
 public:
-    enum TypeClass : uint8_t {
-        TK_Builtin,
-        TK_Pointer,
+    enum Kind {
+        firstType,
+
+        PointerTypeKind = firstType,
+        ReferenceTypeKind,  // NOTE: Planned but currently not implemented
+        BuiltinTypeKind,
+        EnumTypeKind,       // NOTE: Planned but currently not implemented
+        ArrayTypeKind,
+        StructTypeKind,
+        TemplateTypeKind,   // NOTE: Planned but currently not implemented
+
+        lastType = TemplateTypeKind
     };
 private:
-    TypeClass Class;
-protected:
-    Type(TypeClass cls)
-        : Class(cls) {}
+    Kind TypeKind;
 public:
-    inline TypeClass getTypeClass() const {
-        return Class;
-    }
-
-    inline bool isBuiltin() const {
-        return Class == TK_Builtin;
-    }
-
-    inline bool isPointer() const {
-        return Class == TK_Pointer;
-    }
-};
-
-class BuiltinType : public Type {
-public:
-    static constexpr TypeClass ClassID = TK_Builtin;
-
-    enum BuiltinKind : uint8_t {
-        BK_i8,
-        BK_i16,
-        BK_i32,
-        BK_i64,
-
-        BK_u8,
-        BK_u16,
-        BK_u32,
-        BK_u64,
-
-        BK_f32,
-        BK_f64,
-
-        BK_bool
-    };
-private:
-    BuiltinKind Kind;
-public:
-    BuiltinType(BuiltinKind kind)
-        : Type(ClassID), Kind(kind) {}
-
-    static std::optional<BuiltinKind> toBuiltinKind(llvm::StringRef name) {
-        return llvm::StringSwitch<std::optional<BuiltinKind>>(name)
-            .Case("i8",  BK_i8)
-            .Case("i16", BK_i16)
-            .Case("i32", BK_i32)
-            .Case("i64", BK_i64)
-            .Case("u8",  BK_u8)
-            .Case("u16", BK_u16)
-            .Case("u32", BK_u32)
-            .Case("u64", BK_u64)
-            .Case("f32", BK_f32)
-            .Case("f64", BK_f64)
-            .Case("bool", BK_bool)
-            .Default(std::nullopt);
-    }
-
-    inline BuiltinKind getKind() const {
-        return Kind;
-    }
-
-    inline bool isIntiger() const {
-        return BK_i8 <= Kind && Kind <= BK_i64;
-    }
-
-    inline bool isUnsigned() const {
-        return BK_u8 <= Kind && Kind <= BK_u64;
-    }
-
-    inline bool isFloat() const {
-        return BK_f32 <= Kind && Kind <= BK_f64;
-    }
-};
-
-class PointerType : public Type {
-public:
-    static constexpr TypeClass ClassID = TK_Builtin;
-private:
-    const Type* Pointee;
-public:
-    PointerType(const Type* pointee) 
-        : Type(ClassID), Pointee(pointee) {}
+    Type(Kind TK)
+        : TypeKind(TK) {}
     
+    static bool classof(const Type* d) {
+        return true;
+    }
+
+    inline Kind getKind() const {
+        return TypeKind;
+    }
+
+    bool isPointerTy() const {
+        return TypeKind == PointerTypeKind;
+    }
+
+    bool isBuiltinTy() const {
+        return TypeKind == BuiltinTypeKind;
+    }
+
+    bool isArrayTy() const {
+        return TypeKind == ArrayTypeKind;
+    }
+
+    bool isStructTy() const {
+        return TypeKind == StructTypeKind;
+    }
+
+    bool isIntegerTy() const {
+        if (auto bt = llvm::dyn_cast<const BuiltinType>(this))
+            return bt->isIntegerTy();
+        return false;
+    }
+
+    bool isFloatingTy() const {
+        if (auto bt = llvm::dyn_cast<const BuiltinType>(this))
+            return bt->isFloatingTy();
+        return false;
+    }
+
+    bool isBooleanTy() const {
+        if (auto bt = llvm::dyn_cast<const BuiltinType>(this))
+            return bt->isBooleanTy();
+        return false;
+    }
+};
+
+class AdressType : public Type {
+private:    
+    Type* Pointee;
+protected:
+    AdressType(Kind TK, Type* pointee)
+        : Type(TK), Pointee(pointee) {}
+public:
+    static bool classof(const Type* d) {
+        return d->getKind() == PointerTypeKind ||
+               d->getKind() == ReferenceTypeKind;
+    }
+
+    Type* getPointee() {
+        return Pointee;
+    }
+
     const Type* getPointee() const {
         return Pointee;
     }
 };
 
-} // namespace c
+class PointerType : public AdressType {
+public:
+    static constexpr Kind ClassKind = PointerTypeKind;
+
+    PointerType(Type* pointee) 
+        : AdressType(ClassKind, pointee) {}
+
+    static bool classof(const Type* d) {
+        return d->getKind() == ClassKind;
+    }
+};
+
+class BuiltinType : public Type {
+public:
+    static constexpr Kind ClassKind = BuiltinTypeKind;
+
+    enum BuiltinKind {
+        Bool,
+        I8,
+        I16,
+        I32,
+        I64,
+        U8,
+        U16,
+        U32,
+        U64,
+        F32,
+        F64
+    };
+private:
+    BuiltinKind BK;
+public:
+    BuiltinType(BuiltinKind kind)
+        : Type(ClassKind), BK(kind) {}
+
+    static bool classof(const Type* d) {
+        return d->getKind() == ClassKind;
+    }
+
+    BuiltinKind getBuiltinKind() const {
+        return BK;
+    }
+
+    bool isSigned() const {
+        return BK == I8 ||
+               BK == I16 ||
+               BK == I32 ||
+               BK == I64;
+    }
+
+    bool isUnsigned() const {
+        return BK == U8 ||
+               BK == U16 ||
+               BK == U32 ||
+               BK == U64;
+    }
+
+    bool isIntegerTy() const {
+        return isSigned() || isUnsigned();
+    }
+
+    bool isFloatingTy() const {
+        return BK == F32 ||
+               BK == F64;
+    }
+
+    bool isBooleanTy() const {
+        return BK == Bool;
+    }
+};
+
+class ArrayType : public Type {
+public:
+    static constexpr Kind ClassKind = ArrayTypeKind;
+private:
+    Type* ElemType;
+    size_t InitSize;
+public:
+    ArrayType(Type* ET, size_t size)
+        : Type(ClassKind), ElemType(ET), InitSize(size) {}
+
+    static bool classof(const Type* d) {
+        return d->getKind() == ClassKind;
+    }
+
+    size_t getInitSize() const {
+        return InitSize;
+    }
+
+    void setInitSize(size_t size) {
+        InitSize = size;
+    }
+
+    Type* getElemType() {
+        return ElemType;
+    }
+
+    const Type* getElemType() const {
+        return ElemType;
+    }
+};
+
+class StructType : public Type {
+public:
+    static constexpr Kind ClassKind = StructTypeKind;
+private:
+    ast::StructDecl* DC;
+public:
+    StructType(ast::StructDecl* decl)
+        : Type(ClassKind), DC(decl) {}
+
+    static bool classof(const Type* d) {
+        return d->getKind() == ClassKind;
+    }
+
+    ast::StructDecl* getDecl() {
+        return DC;
+    }
+
+    const ast::StructDecl* getDecl() const {
+        return DC;
+    }
+};
+
+} // namsepace c

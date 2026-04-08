@@ -3,7 +3,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 
-#include "include/lexer/token.hpp"
+#include "include/Lexer/Token.hpp"
 
 namespace c {
 namespace lexer {

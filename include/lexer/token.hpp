@@ -2,7 +2,7 @@
 
 #include "llvm/ADT/StringRef.h"
 
-#include "include/io/source_location.hpp"
+#include "include/IO/SrcSpan.hpp"
 
 namespace c {
 
@@ -70,8 +70,8 @@ enum class TokenType {
     MoreEqual,      // >=   a is more than or equal to b
     LessEqual,      // <=   a is less than or equal to b
 
-    LogAND,         // &&
-    LogOR,          // ||
+    AmpAmp,         // &&
+    PipePipe,       // ||
 /*  BitAND          // &  Same as "Ampersand"   */
 /*  BitOR,          // |  Same as "Pipe"        */
     BitXOR,         // !|
@@ -156,8 +156,8 @@ llvm::StringRef strTokenType(TokenType type) {
         case TokenType::MoreEqual:  return "MoreEqual";
         case TokenType::LessEqual:  return "LessEqual";
 
-        case TokenType::LogAND:     return "LogAND";
-        case TokenType::LogOR:      return "LogOR";
+        case TokenType::AmpAmp:     return "AmpAmp";
+        case TokenType::PipePipe:   return "PipePipe";
         case TokenType::BitXOR:     return "BitXOR";
 
         case TokenType::Exclamation:return "Exclamation";
@@ -224,11 +224,11 @@ public:
     }
 
     inline SrcLoc getStartLoc() const {
-        return Span.getStartLoc();
+        return Span.getStart();
     }
 
     inline SrcLoc getEndLoc() const {
-        return Span.getEndLoc();
+        return Span.getEnd();
     }
 
     inline size_t getLength() const {
@@ -303,8 +303,8 @@ public:
             case TokenType::ExclEqual:
             case TokenType::MoreEqual:
             case TokenType::LessEqual:
-            case TokenType::LogAND:
-            case TokenType::LogOR:
+            case TokenType::AmpAmp:
+            case TokenType::PipePipe:
             case TokenType::Exclamation:
             case TokenType::Equal:
             case TokenType::Ampersand:
