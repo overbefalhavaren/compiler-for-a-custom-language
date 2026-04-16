@@ -52,7 +52,6 @@ private:
     Kind DeclKind;
     SrcSpan Span;
     Container* DeclContainer;
-    Decl* NextDecl;
 protected:
     Decl(Kind DK, SrcSpan span)
         : DeclKind(DK), Span(span) {}
@@ -94,18 +93,6 @@ public:
         return DeclContainer;
     }
 
-    void setNextDecl(Decl* DC) {
-        NextDecl = DC;
-    }
-
-    Decl* getNextDecl() {
-        return NextDecl;
-    }
-
-    const Decl* getNextDecl() const {
-        return NextDecl;
-    }
-
     bool isNamed() const {
         return NamedDecl::classof(this);
     }
@@ -119,7 +106,7 @@ protected:
         : Decl(DK, span), Name(name) {}
 public:
     static bool classof(const Decl* d) {
-        return d->getKind() <= firstNamedDecl && 
+        return d->getKind() >= firstNamedDecl && 
                d->getKind() <= lastNamedDecl;
     }
 
@@ -130,13 +117,13 @@ public:
 
 class TypeDecl : public NamedDecl {
 private:
-    Type* Ty;
+    const Type* Ty;
 protected:
     TypeDecl(Kind DK, SrcSpan span, llvm::StringRef name)
         : NamedDecl(DK, span, name), Ty(nullptr) {}
 public:
     static bool classof(const Decl* d) {
-        return d->getKind() <= firstTypeDecl && 
+        return d->getKind() >= firstTypeDecl && 
                d->getKind() <= lastTypeDecl;
     }
 
@@ -144,7 +131,7 @@ public:
         return Ty;
     }
 
-    void setDeclType(Type* DT) {
+    void setDeclType(const Type* DT) {
         Ty = DT;
     }
 };
@@ -214,7 +201,7 @@ protected:
         : NamedDecl(DK, span, name), Info(info) {}
 public:
     static bool classof(const Decl* d) {
-        return d->getKind() <= firstValueDecl && 
+        return d->getKind() >= firstValueDecl && 
                d->getKind() <= lastValueDecl;
     }
 
@@ -243,7 +230,7 @@ protected:
         : ValueDecl(DK, span, name, info), Init(init) {}
 public:
     static bool classof(const Decl* d) {
-        return d->getKind() <= firstInitDecl && 
+        return d->getKind() >= firstInitDecl && 
                d->getKind() <= lastInitDecl;
     }
 
@@ -405,13 +392,19 @@ public:
         return Parameters[i];
     }
 
-    llvm::MutableArrayRef<ParamDecl*> parameters() {
-        return llvm::MutableArrayRef<ParamDecl*>(Parameters.begin(), Parameters.end());
-    }
-
     llvm::ArrayRef<ParamDecl*> parameters() const {
         return Parameters;
     }
+
+    llvm::MutableArrayRef<ParamDecl*> parameters() {
+        return llvm::MutableArrayRef<ParamDecl*>(Parameters.begin(), Parameters.end());
+    }
+};
+
+// FIXME: Implement
+class ModuleDecl : public NamedDecl, public Container {
+public:
+    
 };
 
 } // namespace ast

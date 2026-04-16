@@ -4,7 +4,7 @@
 #include <optional>
 #include <type_traits>
 
-#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
@@ -17,105 +17,58 @@ namespace ast {
 class Container {
 public:
     class LookupResult {
-        friend class Container;
+        friend class Container; // To access the lookup map of Container
     private:
         llvm::StringRef Name;
         Container* LookupContainer;
-        std::optional<llvm::DenseMap<Decl::Kind, NamedDecl*>&> Lookup;
 
-        LookupResult(Container* lookup, llvm::StringRef name)
-            : LookupContainer(lookup), Name(name) {}
+        bool HasCachedLookup;
+        llvm::ArrayRef<NamedDecl*> Lookup;
 
-        NamedDecl* lookup(Decl::Kind kind) {
-            if (Lookup.has_value())
-                return Lookup.value().lookup(kind);
+        llvm::ArrayRef<NamedDecl*>& getLookup() {
+            if (HasCachedLookup)
+                return Lookup;
 
             auto name_lookup = LookupContainer->LookupMap.find(Name);
             if (name_lookup == LookupContainer->LookupMap.end())
-                return nullptr;
+                return {};
 
-            (void)Lookup.emplace(name_lookup->second);
-            return Lookup.value().lookup(kind);
+            HasCachedLookup = true;
+            Lookup = name_lookup->second;
+            return Lookup;
         }
     public:
+        LookupResult(Container* lookup, llvm::StringRef name)
+            : LookupContainer(lookup), Name(name), HasCachedLookup(false) {}
+
         template <typename T>
         T* get() {
-            static_assert(std::is_base_of<ast::Decl, T>::value && "T must be subclass of Decl.");
-            return static_cast<T*>(lookup(T::ClassKind));
+            static_assert(std::is_base_of_v<ast::Decl, T> && "T must be subclass of Decl.");
+            static_assert(std::is_base_of_v<ast::NamedDecl, T> && "T must be a subclass of NamedDecl.");
+            
+            for (ast::NamedDecl* DC : getLookup())
+                if (isa<T>(DC))
+                    return DC;
+            return nullptr
         }
 
         NamedDecl* getKind(Decl::Kind kind) {
-            return lookup(kind);
+            for (ast::NamedDecl* DC : getLookup())
+                if (DC->getKind() == kind)
+                    return DC;
+            return nullptr;
         }
 
-         // FIXME: "auto" in function declarations is retarded
-        auto decls() {
-            if (Lookup.has_value())
-                return Lookup.value().values();
-
-            auto name_lookup = LookupContainer->LookupMap.find(Name);
-            if (name_lookup == LookupContainer->LookupMap.end())
-                return;
-
-            Lookup.emplace(name_lookup->second);
-            return Lookup.value().values();
-        }
-    };
-
-    class DeclIterator {
-    private:
-        Decl* Current;
-    public: 
-        DeclIterator(Decl* start)
-            : Current(start) {}
-
-        Decl* operator*() const {
-            return Current;
-        }
-
-        DeclIterator& operator++() {
-            Current = Current->getNextDecl();
-            return *this;
-        }
-
-        DeclIterator operator++(int) {
-            DeclIterator tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        bool operator!=(const DeclIterator& other) const {
-            return Current != other.Current;
-        }
-
-        bool operator==(const DeclIterator& other) const {
-            return Current == other.Current;
-        }
-    };
-
-    class DeclRange {
-    private:
-        Decl* Start;
-    public:
-        DeclRange(Decl* start)
-            : Start(start) {}
-
-        DeclIterator begin() {
-            return DeclIterator(Start);
-        }
-
-        DeclIterator end() {
-            return DeclIterator(nullptr);
+        llvm::ArrayRef<NamedDecl*> decls() {
+            return getLookup();
         }
     };
 private:
     Decl* This;
     Container* Parent;
 
-    Decl* FirstDecl;
-    Decl* LastDecl;
-
-    llvm::StringMap<llvm::DenseMap<Decl::Kind, NamedDecl*>> LookupMap;
+    llvm::SmallVector<ast::Decl*> DeclArray;
+    llvm::StringMap<llvm::SmallVector<ast::NamedDecl*>> LookupMap;
 protected:
     Container(Decl* DC)
         : This(DC) {}
@@ -145,13 +98,7 @@ public:
         if (LookupMapIsConstructed() && DC->isNamed())
             return pushDeclToLookupMap(llvm::cast<NamedDecl>(DC));
 
-        if (!FirstDecl) {
-            FirstDecl = LastDecl = DC;
-            return;
-        }
-
-        LastDecl->setNextDecl(DC);
-        LastDecl = DC;
+        DeclArray.push_back(DC);
     }
 
     LookupResult lookup(llvm::StringRef name) {
@@ -161,12 +108,12 @@ public:
         return LookupResult(this, name);
     }
 
-    DeclRange decls() {
-        return DeclRange(FirstDecl);
+    llvm::ArrayRef<Decl*> decls() const {
+        return DeclArray;
     }
 
-    bool hasLookupParentFallbacl() const {
-        // FIXME:
+    llvm::MutableArrayRef<Decl*> decls() {
+        return DeclArray;
     }
 
     bool isStructDecl() const {
@@ -194,9 +141,9 @@ private:
     void pushDeclToLookupMap(NamedDecl* DC) {
         auto result = LookupMap.find(DC->getName());
         if (result != LookupMap.end()) 
-            (void)result->second.insert({DC->getKind(), DC});
+            (void)result->second.push_back(DC);
 
-        (void)LookupMap.insert({DC->getName(), {{DC->getKind(), DC}}});
+        (void)LookupMap.insert({DC->getName(), {DC}});
     }
 };
 

@@ -7,16 +7,6 @@
 #include "include/AST/Expr.hpp"
 #include "include/IO/SrcSpan.hpp"
 
-// // Forward declarations instead of imports because intellisense
-// // is retarded and has severe schizofrenia freak-outs otherwise
-// namespace c {
-// namespace ast {
-// class Decl; // include/AST/Decl.hpp
-// class Expr; // include/AST/Expr.hpp
-// } // namespace ast
-// // class Type; // include/AST/Type.hpp
-// } // namespace c
-
 namespace c {
 namespace ast {
 
@@ -107,7 +97,7 @@ protected:
         : Stmt(SK, span), Body(body) {}
 public:
     static bool classof(const Stmt* s) {
-        return s->getKind() <= firstStmtWithBody && 
+        return s->getKind() >= firstStmtWithBody && 
                s->getKind() <= lastStmtWithBody;
     }
 
@@ -128,7 +118,7 @@ protected:
         : StmtWithBody(SK, span, body), Condition(cond) {}
 public:
     static bool classof(const Stmt* s) {
-        return s->getKind() <= firstConditionalStmt && 
+        return s->getKind() >= firstConditionalStmt && 
                s->getKind() <= lastConditionalStmt;
     }
 

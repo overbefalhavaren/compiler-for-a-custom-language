@@ -155,7 +155,7 @@ public:
 
     bool contains(const SrcSpan& span) const {
         assert(ID == span.getID() && "Can't compare spans from different files.");
-        return Start <= span.getStart() && span.getEnd() <= End;
+        return Start <= span.getStartOffset() && span.getEndOffset() <= End;
     }
 };
 

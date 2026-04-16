@@ -20,8 +20,8 @@ public:
         Named,
 
         // Pointers and references. Grouped under Adress
-        Pointer,
-        Reference,
+        RawPointer,
+        RefPointer,
 
         Array,
     };
@@ -63,12 +63,9 @@ public:
         return TypeInfo(span, Kind::Named, name);
     }
 
-    static TypeInfo CreatePointer(SrcSpan span, TypeInfo* pointee) {
-        return TypeInfo(span, Kind::Pointer, "", pointee);
-    }
-
-    static TypeInfo CreateReference(SrcSpan span, TypeInfo* pointee) {
-        return TypeInfo(span, Kind::Reference, "", pointee);
+    static TypeInfo CreatePointer(SrcSpan span, bool isRaw, TypeInfo* pointee) {
+        Kind kind = isRaw ? RawPointer | RefPointer;
+        return TypeInfo(span, kind, "", pointee);
     }
 
     static TypeInfo CreateArray(SrcSpan span, TypeInfo* elemType, Expr* size) {
@@ -106,15 +103,15 @@ public:
     }
 
     TypeInfo* getPointeeType() {
-        assert((isAdressTy() || isArrayTy()) && "Only pointers, references and arrays point to a type.");
+        assert((isPointerTy() || isArrayTy()) && "Only pointers, references and arrays point to a type.");
         if (isArrayTy()) 
             return Array.ElemType;
         return Adress.Pointee;
     }
 
     const TypeInfo* getPointeeType() const {
-        assert((isAdressTy() || isArrayTy()) && "Only pointers, references and arrays point to a type.");
-        if (isArrayTy()) 
+        assert((isPointerTy() || isArrayTy()) && "Only pointers, references and arrays point to a type.");
+        if (isArrayTy())
             return Array.ElemType;
         return Adress.Pointee;
     }
@@ -129,20 +126,31 @@ public:
         return Array.Size;
     }
 
+    bool isTypeCompatible(const Type* T) const {
+        if (isPointerTy() && T->isPointerTy()) {
+            const PointerType* ty = llvm::cast<PointerType>(T);
+            if (isRawPointerTy() && ty->isRaw())
+                return false;
+            return Adress.Pointee->isTypeCompatible(ty->getPointee());
+        } else if (isNamedTy() && T->isNamedTy()) {
+            return true;
+        } else if (isArrayTy() && T->isArrayTy()) {
+            return true;
+        }
+        return false;
+    }
+
     bool isNamedTy() const {
         return TypeKind == Kind::Named;
     }
 
     bool isPointerTy() const {
-        return TypeKind == Kind::Pointer;
+        return TypeKind == Kind::RawPointer ||
+               TypeKind == Kind::RefPointer;
     }
 
-    bool isReferenceTy() const {
-        return TypeKind == Kind::Reference;
-    }
-
-    bool isAdressTy() const {
-        return isPointerTy() || isReferenceTy();
+    bool isRawPointerTy() const {
+        return TypeKind == Kind::RawPointer;
     }
 
     bool isArrayTy() const {

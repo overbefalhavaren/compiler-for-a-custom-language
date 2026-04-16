@@ -17,7 +17,6 @@ public:
         firstType,
 
         PointerTypeKind = firstType,
-        ReferenceTypeKind,  // NOTE: Planned but currently not implemented
         BuiltinTypeKind,
         EnumTypeKind,       // NOTE: Planned but currently not implemented
         ArrayTypeKind,
@@ -40,12 +39,17 @@ public:
         return TypeKind;
     }
 
-    bool isPointerTy() const {
-        return TypeKind == PointerTypeKind;
+    bool isNamedTy() const {
+        return isBuiltinTy() ||
+               isStructTy();
     }
 
     bool isBuiltinTy() const {
         return TypeKind == BuiltinTypeKind;
+    }
+
+    bool isPointerTy() const {
+        return TypeKind == PointerTypeKind;
     }
 
     bool isArrayTy() const {
@@ -72,39 +76,6 @@ public:
         if (auto bt = llvm::dyn_cast<const BuiltinType>(this))
             return bt->isBooleanTy();
         return false;
-    }
-};
-
-class AdressType : public Type {
-private:    
-    Type* Pointee;
-protected:
-    AdressType(Kind TK, Type* pointee)
-        : Type(TK), Pointee(pointee) {}
-public:
-    static bool classof(const Type* d) {
-        return d->getKind() == PointerTypeKind ||
-               d->getKind() == ReferenceTypeKind;
-    }
-
-    Type* getPointee() {
-        return Pointee;
-    }
-
-    const Type* getPointee() const {
-        return Pointee;
-    }
-};
-
-class PointerType : public AdressType {
-public:
-    static constexpr Kind ClassKind = PointerTypeKind;
-
-    PointerType(Type* pointee) 
-        : AdressType(ClassKind, pointee) {}
-
-    static bool classof(const Type* d) {
-        return d->getKind() == ClassKind;
     }
 };
 
@@ -164,6 +135,33 @@ public:
 
     bool isBooleanTy() const {
         return BK == Bool;
+    }
+};
+
+class PointerType : public Type {
+public:
+    static constexpr Kind ClassKind = PointerTypeKind;
+private:
+    bool IsRawPtr;
+    Type* Pointee;
+protected:
+    PointerType(bool isRawPtr, Type* pointee)
+        : Type(ClassKind), IsRawPtr(isRawPtr), Pointee(pointee) {}
+public:
+    static bool classof(const Type* d) {
+        return d->getKind() == PointerTypeKind;
+    }
+
+    bool isRaw() const {
+        return IsRawPtr;
+    }
+
+    Type* getPointee() {
+        return Pointee;
+    }
+
+    const Type* getPointee() const {
+        return Pointee;
     }
 };
 

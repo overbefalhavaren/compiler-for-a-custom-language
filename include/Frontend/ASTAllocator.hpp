@@ -4,6 +4,8 @@
 
 #include "llvm/Support/Allocator.h"
 
+#include "include/AST/Type.hpp"
+
 namespace c {
 
 class ASTAllocator {
@@ -12,6 +14,10 @@ private:
 public:
     ASTAllocator() = default;
     ~ASTAllocator() = default;
+
+    BuiltinType* getBuiltinType(BuiltinType::BuiltinKind kind) {
+        
+    }
 
     void* Allocate(size_t amnt, size_t size) {
 

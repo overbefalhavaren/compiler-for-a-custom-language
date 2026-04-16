@@ -8,6 +8,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #include "include/AST/Decl.hpp"
 #include "include/AST/Stmt.hpp"
@@ -26,7 +27,7 @@ protected:
 public:
     static bool classof(const Stmt* s) {
         return s->getKind() <= firstExpr && 
-               s->getKind() <= lastExpr;
+               s->getKind() >= lastExpr;
     }
 
     const Type* getType() const {
@@ -41,18 +42,58 @@ public:
         // FIXME:
     }
 
-    bool isLValue() const {
-        if (getKind() == UnaryOperatorKind)
-            return llvm::cast<UnaryOperator>(this)->isLValue();
-        if (getKind() == DeclRefExprKind)
-            return llvm::cast<VarDeclRef>(this)->isLValue();
-        return getKind() == AccessExprKind ||
-               getKind() == SliceExprKind ||
-               getKind() == BinaryOperatorKind;
+    bool isModifiableValue() const {
+        // FIXME:
     }
 
-    bool isRValue() const {
-        return !isLValue();
+    bool isStorageLocation() const {
+        // NOTE: This switch statement only includes expression kinds that 
+        // are implemented and have classes implemented for them.
+        switch (getKind()) {
+            default:
+                llvm_unreachable("Expr subclass has no case implemented.");
+
+            case UnaryOperatorKind:
+                if (llvm::cast<UnaryOperator>(this)->isDerefOp())
+                    return true;
+                return false;
+            case BinaryOperatorKind:
+                // Expressions like "a = b = c" are allowed
+                if (llvm::cast<BinaryOperator>(this)->isAssignOp()) // FIXME: Might be wrong
+                    return true;
+                return false;
+
+            // TODO: When we implement things like function pointers, namespaces, 
+            // templates and etc, DeclRefExpr will be able to point to almost any
+            // kind of NamedDecl. Logic for this will need to be implemented.
+            case DeclRefExprKind:
+                // Conditional assertion to try save future headache.
+                auto this_ = llvm::cast<DeclRefExpr>(this);
+                if (this_->getDecl())
+                    // Only VarDecl and ParamDecl have logic implemented for them.
+                    assert(llvm::isa<InitDecl>(this_->getDecl()));
+                return true;
+
+            // TODO: When we add functions to structs in the future AccessExpr 
+            // might also point to a function. This will need its own logic 
+            // since a function can't be assigned to.
+            case AccessExprKind:
+                // No assertion here since the class methods will probably have
+                // to change when logic for method access is implemented.
+                return true;
+
+            case SliceExprKind:
+                // Both normal array access and the slice syntax return an
+                // assignable memory location.
+                return true;
+            
+            case CallExprKind:
+            case ArrayLiteralKind:
+            case FloatingLiteralKind:
+            case IntegerLiteralKind:
+            case BooleanLiteralKind:
+                return false;
+        }
     }
 
     bool isLiteralExpr() const {
@@ -73,7 +114,7 @@ protected:
         : Expr(SK, T, span), Base(base) {}
 public:
     static bool classof(const Stmt* s) {
-        return s->getKind() <= firstQualExpr && 
+        return s->getKind() >= firstQualExpr && 
                s->getKind() <= lastQualExpr;
     }
 
@@ -230,8 +271,8 @@ public:
     static constexpr Kind ClassKind = UnaryOperatorKind;
 
     enum OpKind {
-        Deref,      // Pointer dereference. Syntax: *
-        AdressOf,   // Get pointer to. Syntax: &
+        Deref,      // Pointer dereference.
+        Adress,     // Get pointer pointer of item.
         AddOne,     // "++" syntax, alias for "x += 1"
         SubOne,     // "--" syntax, aluas for "x -= 1"
         Plus,       // Positive number literal or cast. Ex: +10, +getNumber()
@@ -239,14 +280,23 @@ public:
         Not         // Negate operator; turns a true value false and vice versa. Syntax: !
     };
 private:
+    // Only used in combination with Deref or Adress. Indicates
+    // wether the pointer is raw or a reference.
+    bool IsRawPtr;
+
     OpKind Op;
     Expr* Sub;
 public:
-    UnaryOperator(SrcSpan span, Type* T, OpKind op, Expr* sub)
-        : Expr(ClassKind, T, span), Op(op), Sub(sub) {}
+    UnaryOperator(SrcSpan span, OpKind op, Expr* sub, bool isRawPtr = false)
+        : Expr(ClassKind, nullptr, span), Op(op), Sub(sub), IsRawPtr(isRawPtr) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
+    }
+
+    bool isRawPtrOp() const {
+        assert(isPointerOp() && "This unary operator is not a pointer operator.\n");
+        return IsRawPtr;
     }
 
     OpKind getOpKind() const {
@@ -255,14 +305,6 @@ public:
 
     Expr* getSubExpr() {
         return Sub;
-    }
-
-    bool isLValue() const {
-        return isDerefOp();
-    }
-
-    bool isRValue() const {
-        return !isLValue();
     }
 
     const Expr* getSubExpr() const {
@@ -296,7 +338,7 @@ public:
     }
 
     bool isAdressOp() const {
-        return Op == AdressOf;
+        return Op == Adress;
     }
 
     bool isPointerOp() const {
@@ -308,7 +350,9 @@ class CallExpr : public Expr {
 public:
     static constexpr Kind ClassKind = CallExprKind;
 private:
-    FunctionDecl* DC;
+    // Pointer to the declaration of the callee. Can be either FunctionDecl* or StructDecl*
+    Decl* DC;
+
     llvm::StringRef Callee;
     llvm::SmallVector<Expr*> Arguments;
 public:
@@ -323,15 +367,15 @@ public:
         return Callee;
     }
 
-    FunctionDecl* getCalleeDecl() {
+    Decl* getCalleeDecl() {
         return DC;
     }
 
-    const FunctionDecl* getCalleeDecl() const {
+    const Decl* getCalleeDecl() const {
         return DC;
     }
 
-    void setCalleeDecl(FunctionDecl* decl) {
+    void setCalleeDecl(Decl* decl) {
         assert(!DC && "This CallExpr already has a callee declaration defined");
         DC = decl;
     }
@@ -361,64 +405,34 @@ public:
     }
 };
 
-// TODO: Eventually should support expressions like namespace::attribute
-// TODO: DeclRefExpr usually supports nested expressions like namespace::attribute.
-// This includes functions, variables and enum constants.
-// class DeclRefExpr : public Expr {
-// private:
-//     llvm::StringRef Name;
-// public:
-//     DeclRefExpr(SrcSpan span, Type* T, llvm::StringRef name)
-//         : Expr(DeclRefExprKind, T, span), Name(name) {}
-    
-//     llvm::StringRef getName() const {
-//         return Name;
-//     }
-
-//     Decl* getDecl() {
-
-//     }
-// };
-
-// NOTE: Temporary class until DeclRefExpr is implemented
-class VarDeclRef : public Expr {
+class DeclRefExpr : public Expr {
 public:
     static constexpr Kind ClassKind = DeclRefExprKind;
 private:
     llvm::StringRef Name;
-    VarDecl* DC;
+    Decl* DC;
 public:
-    VarDeclRef(SrcSpan span, llvm::StringRef name)
-        : Expr(ClassKind, nullptr, span), Name(name) {}
+    DeclRefExpr(SrcSpan span, Type* T, llvm::StringRef name)
+        : Expr(DeclRefExprKind, T, span), Name(name), DC(nullptr) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
     }
-
+   
     llvm::StringRef getName() const {
         return Name;
     }
 
-    void setDecl(VarDecl* decl) {
-        assert(DC == nullptr && "This VarDeclRef has already been resolved.");
-        setType(decl->getType());
+    void setDecl(ast::Decl* decl) {
         DC = decl;
     }
 
-    VarDecl* getDecl() {
+    Decl* getDecl() {
         return DC;
     }
 
-    const VarDecl* getDecl() const {
+    const Decl* getDecl() const {
         return DC;
-    }
-
-    bool isLValue() const {
-        return DC->isMutable();
-    }
-
-    bool isRValue() const {
-        return !isLValue();
     }
 };
 

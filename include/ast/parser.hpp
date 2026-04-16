@@ -138,7 +138,7 @@ private:
             case TokenType::Star:
                 return ast::UnaryOperator::OpKind::Deref;
             case TokenType::Ampersand:
-                return ast::UnaryOperator::OpKind::AdressOf;
+                return ast::UnaryOperator::OpKind::Adress;
             case TokenType::PlusPlus:
                 return ast::UnaryOperator::OpKind::AddOne;
             case TokenType::MinusMinus:
@@ -294,7 +294,7 @@ private:
             }
             case TokenType::Identifier: {
                 if (peekToken().isNot(TokenType::LParen)) {
-                    return Alloc.Create<ast::VarDeclRef>(
+                    return Alloc.Create<ast::DeclRefExpr>(
                         start.getSpan(), start.getData()
                     );
                 }

@@ -84,7 +84,7 @@ private:
         
         TokenType type = TokenType::Identifier;
         llvm::StringRef lexeme = Src.slice(start, Offset);
-        auto keywords = lexer::get_keywords();
+        auto keywords = lexer::getKeywords();
         if (keywords.contains(lexeme))
             type = keywords[lexeme];
 
@@ -171,13 +171,13 @@ private:
             case '&': 
                 if (peek() == '&') {
                     if (!isEof()) consume(1);
-                    type = TokenType::LogAND;           // &&
+                    type = TokenType::AmpAmp;           // &&
                 } else type = TokenType::Ampersand;     // &
                 break;
             case '|': 
                 if (peek() == '|') {
                     if (!isEof()) consume(1);
-                    type = TokenType::LogOR;            // ||
+                    type = TokenType::PipePipe;            // ||
                 } else type = TokenType::Pipe;          // |
                 break;
             case '!': 
