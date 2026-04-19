@@ -66,7 +66,7 @@ public:
     SrcLoc(const SrcLoc&) = default;
     SrcLoc& operator=(const SrcLoc&) = default;
 
-    inline bool operator==(const SrcLoc& other) {
+    inline bool operator==(const SrcLoc& other) const {
         return getID() == other.getID() && getOffset() == other.getOffset();
     }
 
@@ -85,8 +85,10 @@ public:
 
 /* Stores two offsets in a source file to creata a span. */
 class SrcSpan {
+    // TODO: Maybe remove friend classes and make the constructor public
     friend class Lexer;
     friend class Token;
+    friend class Source;
 private:
     // TODO: 
     // can be optimized in the same way a Location but using a uint56 instead.
@@ -114,9 +116,9 @@ public:
     SrcSpan(const SrcSpan&) = default;
     SrcSpan& operator=(const SrcSpan&) = default;
 
-    bool operator ==(const SrcSpan& other) {
+    bool operator ==(const SrcSpan& other) const {
         return getID() == other.getID() && 
-               getStart() == other.getStart() && 
+               getStartOffset() == other.getStartOffset() && 
                getEnd() == other.getEnd();
     }
 
