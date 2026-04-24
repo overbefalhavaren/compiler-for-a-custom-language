@@ -6,12 +6,13 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#include "include/AST/Expr.hpp"
 #include "include/AST/Type.hpp"
 #include "include/IO/SrcSpan.hpp"
 
 namespace c {
 namespace ast {
+
+class Expr; // include/AST/Expr.hpp
 
 class TypeInfo {
 public:
@@ -33,14 +34,14 @@ private:
     union {
         struct {
             llvm::StringRef Name;
-        } Named;
+        } UNamed;
         struct {
             TypeInfo* Pointee;
-        } Adress;
+        } UAdress;
         struct {
             TypeInfo* ElemType;
             Expr* Size;
-        } Array;
+        } UArray;
     };
 
     TypeInfo(SrcSpan span, Kind kind, 
@@ -49,12 +50,12 @@ private:
         Expr* arraySize = nullptr
     ) : Span(span), TypeKind(kind), Resolved(nullptr) {
         if (isNamedTy()) {
-            Named.Name = name;
-        } else if (isAdressTy()) {
-            Adress.Pointee = pointee;
+            UNamed.Name = name;
+        } else if (isPointerTy()) {
+            UAdress.Pointee = pointee;
         } else if (isArrayTy()) {
-            Array.ElemType = pointee;
-            Array.Size = arraySize;
+            UArray.ElemType = pointee;
+            UArray.Size = arraySize;
         } else
             llvm_unreachable("");
     } 
@@ -64,7 +65,7 @@ public:
     }
 
     static TypeInfo CreatePointer(SrcSpan span, bool isRaw, TypeInfo* pointee) {
-        Kind kind = isRaw ? RawPointer | RefPointer;
+        Kind kind = isRaw ? RawPointer : RefPointer;
         return TypeInfo(span, kind, "", pointee);
     }
 
@@ -99,31 +100,31 @@ public:
 
     llvm::StringRef getName() const {
         assert(isNamedTy() && "This TypeInfo does not refer to a named type.");
-        return Named.Name;
+        return UNamed.Name;
     }
 
     TypeInfo* getPointeeType() {
         assert((isPointerTy() || isArrayTy()) && "Only pointers, references and arrays point to a type.");
         if (isArrayTy()) 
-            return Array.ElemType;
-        return Adress.Pointee;
+            return UArray.ElemType;
+        return UAdress.Pointee;
     }
 
     const TypeInfo* getPointeeType() const {
         assert((isPointerTy() || isArrayTy()) && "Only pointers, references and arrays point to a type.");
         if (isArrayTy())
-            return Array.ElemType;
-        return Adress.Pointee;
+            return UArray.ElemType;
+        return UAdress.Pointee;
     }
 
     Expr* getArraySize() {
         assert(isArrayTy() && "Only array types have a size.");
-        return Array.Size;
+        return UArray.Size;
     }
 
     const Expr* getArraySize() const {
         assert(isArrayTy() && "Only array types have a size.");
-        return Array.Size;
+        return UArray.Size;
     }
 
     bool isTypeCompatible(const Type* T) const {
@@ -131,7 +132,7 @@ public:
             const PointerType* ty = llvm::cast<PointerType>(T);
             if (isRawPointerTy() && ty->isRaw())
                 return false;
-            return Adress.Pointee->isTypeCompatible(ty->getPointee());
+            return UAdress.Pointee->isTypeCompatible(ty->getPointee());
         } else if (isNamedTy() && T->isNamedTy()) {
             return true;
         } else if (isArrayTy() && T->isArrayTy()) {
