@@ -1,26 +1,14 @@
-file(GLOB HEADERS CONFIGURE_DEPENDS
-    # "${CMAKE_SOURCE_DIR}/include/io/source_location" # Not needed until later versions
-
-    "${CMAKE_SOURCE_DIR}/include/lexer/lexer.hpp"
-    "${CMAKE_SOURCE_DIR}/include/lexer/token.hpp"
-    "${CMAKE_SOURCE_DIR}/include/lexer/utils.hpp"
-
-    "${CMAKE_SOURCE_DIR}/include/ast/ast.hpp"
-    "${CMAKE_SOURCE_DIR}/include/ast/parser.hpp"
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/*.cpp
 )
 
-# Use INTERFACE since the library is header only for now
-# add_library(compiler_lib STATIC ${HEADERS}) 
-# target_compile_features(compiler_lib PUBLIC cxx_std_23)
+add_library(compiler_lib STATIC ${SOURCES})
 
-# llvm_map_components_to_libnames(llvm_libs core)
-# target_link_libraries(compiler_lib PUBLIC ${llvm_libs})
+target_include_directories(compiler_lib PUBLIC
+    ${CMAKE_SOURCE_DIR}
+)
 
-# Use INTERFACE library for now
-add_library(compiler_lib INTERFACE)
-target_include_directories(compiler_lib INTERFACE ${CMAKE_SOURCE_DIR})
-
-target_compile_features(compiler_lib INTERFACE cxx_std_23)
+target_compile_features(compiler_lib PUBLIC cxx_std_23)
 
 llvm_map_components_to_libnames(llvm_libs core)
-target_link_libraries(compiler_lib INTERFACE ${llvm_libs})
+target_link_libraries(compiler_lib PUBLIC ${llvm_libs})
