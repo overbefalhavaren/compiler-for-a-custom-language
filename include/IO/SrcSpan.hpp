@@ -88,7 +88,7 @@ class SrcSpan {
     // TODO: Maybe remove friend classes and make the constructor public
     friend class Lexer;
     friend class Token;
-    friend class Source;
+    // friend class Source;
 private:
     // TODO: 
     // can be optimized in the same way a Location but using a uint56 instead.
@@ -97,12 +97,13 @@ private:
     uint32_t End;
     FileID ID;
 
+public:
     SrcSpan(const FileID& id, uint32_t start, uint32_t end) 
         : ID(id), Start(start), End(end) {
             assert(ID.isValid() && "Can't make a span from an invalid FileID.");
             assert(Start <= End && "The start of a span can't be larger than the end.");
         }
-public:
+// public:
     SrcSpan() = default;
     SrcSpan(const SrcLoc& start, const SrcLoc& end)
         : SrcSpan(start.getID(), start.getOffset(), end.getOffset()) {
