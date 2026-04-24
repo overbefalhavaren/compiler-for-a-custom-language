@@ -18,38 +18,36 @@ namespace lexer {
  * is_ident_start() -> _A-Za-z
  */
 
-bool is_alpha(char c) {
+inline bool is_alpha(char c) {
     return llvm::isAlpha(c);
 }
 
-bool is_digit(char c) {
+inline bool is_digit(char c) {
     return llvm::isDigit(c); 
 }
 
-bool is_alnum(char c) {
+inline bool is_alnum(char c) {
     return llvm::isAlnum(c);
 }
 
-bool is_space(char c) {
+inline bool is_space(char c) {
     return llvm::isSpace(c);
 }
 
-bool is_ident_start(char c) {
+inline bool is_ident_start(char c) {
     return c == '_' || is_alpha(c);
 }
 
-bool is_ident(char c) {
+inline bool is_ident(char c) {
     return c == '_' || is_alnum(c);
 }
 
-llvm::StringMap<TokenType> getKeywords() {
+inline llvm::StringMap<TokenType> getKeywords() {
     return llvm::StringMap<TokenType>({
         {   "const",    TokenType::Const    },
         {   "let",      TokenType::Let      },
         {   "mut",      TokenType::Mut      },
-        {   "temp",     TokenType::Temp     },
         {   "type",     TokenType::Type     },
-        {   "move",     TokenType::Move     },
         {   "self",     TokenType::Self     },
 
         {   "end",      TokenType::End      },
@@ -73,11 +71,10 @@ llvm::StringMap<TokenType> getKeywords() {
         {   "trait",    TokenType::Trait    },
 
         {   "import",   TokenType::Import   },
-        {   "export",   TokenType::Export   }
     });
 }
 
-llvm::StringMap<BuiltinType::BuiltinKind> getBuiltins() {
+inline llvm::StringMap<BuiltinType::BuiltinKind> getBuiltins() {
     return llvm::StringMap<BuiltinType::BuiltinKind>({
         {   "bool",     BuiltinType::Bool   },
 
