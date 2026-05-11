@@ -74,7 +74,7 @@ inline llvm::StringMap<TokenType> getKeywords() {
     });
 }
 
-inline llvm::StringMap<BuiltinType::BuiltinKind> getBuiltins() {
+inline llvm::StringMap<BuiltinType::BuiltinKind> getBuiltinMap() {
     return llvm::StringMap<BuiltinType::BuiltinKind>({
         {   "bool",     BuiltinType::Bool   },
 

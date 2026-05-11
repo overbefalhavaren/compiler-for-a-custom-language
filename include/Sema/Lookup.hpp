@@ -8,19 +8,21 @@
 #include "include/AST/Decl.hpp"
 #include "include/Sema/Scope.hpp"
 
+#include "llvm/Support/raw_ostream.h"
+
 namespace c {
 namespace sema {
 
 class LookupResult {
 private:
-    llvm::SmallVector<ast::NamedDecl*, 1> Decls; 
+    llvm::SmallVector<ast::NamedDecl*, 1> Decls = {}; 
 public:
     LookupResult() = default;
     LookupResult(ast::NamedDecl* Single)
         : Decls({Single}) {}
 
     operator bool() const {
-        return isEmpty();
+        return !isEmpty();
     }
 
     bool isEmpty() const {
@@ -46,11 +48,15 @@ public:
     template <typename T>
     T* getAsSingle() const {
         // Check T is a valid subclass of NamedDecl.
-        (void)llvm::cast<ast::NamedDecl, T>();
+        // FIXME: Causes compiler error:
+        // error C2572: 'c::Sema::analyzeInitDecl': redefinition of default argument: parameter 1
+        // (void)llvm::cast<ast::NamedDecl, T>();
+        static_assert(std::is_base_of_v<ast::Decl, T> && "T must be subclass of Decl.");
+        static_assert(std::is_base_of_v<ast::NamedDecl, T> && "T must be a subclass of NamedDecl.");
 
         for (ast::NamedDecl* DC : Decls)
-            if (isa<T>(DC))
-                return DC;
+            if (llvm::isa<T>(DC))
+                return llvm::cast<T>(DC);
         return nullptr;
     }
 
@@ -62,9 +68,9 @@ public:
 class Lookup {
 public:
     enum LookupKind {
-        Any,        // Looks for any kind of Decl.
-        Value,      // Looks for ValueDecl, including FunctionDecl because function pointers is a thing.
-        Type,       // Looks for TypeDecl.
+        Any,    // Looks for any kind of Decl.
+        Value,  // Looks for ValueDecl, including FunctionDecl because function pointers is a thing.
+        Type,   // Looks for TypeDecl.
     };
 private:
     // Function pointers are stupid but let's use them 
@@ -90,11 +96,13 @@ public:
     LookupResult findKind(ast::Decl::Kind kind) const {
         Scope* current = LookupScope;
         while (true) {
-            for (ast::NamedDecl* DC : getDeclsForScope(current))
+            for (ast::NamedDecl* DC : current->decls())
                 if (DC->getKind() == kind && DC->getName() == Name)
                     return LookupResult(DC);
 
-            if (!current->hasParent() || (!current->isFunctionScope() && LocalOnly))
+            if (!current->hasParent())
+                return LookupResult();
+            if (current->isFunctionPrototypeScope() && LocalOnly)
                 return LookupResult();
             current = current->getParent();
         }
@@ -105,20 +113,22 @@ private:
 
         LookupFilter is_lookup_kind = getLookupFilter();
         Scope* current = getStartScope();
+
         while (true) {
-            for (ast::NamedDecl* DC : getDeclsForScope(current))
+            for (ast::NamedDecl* DC : current->decls()) {
                 if (is_lookup_kind(DC) && DC->getName() == Name) {
                     if (isSingle)
                         return LookupResult(DC);
 
                     result.pushDecl(DC);
                 }
+            }
 
-            if (!current->isFunctionScope() && LocalOnly)
-                break;
             if (!current->hasParent())
                 break;
-            
+            if (current->isFunctionPrototypeScope() && LocalOnly)
+                break;
+
             current = current->getParent();
         }
 
@@ -136,17 +146,11 @@ private:
                 if (LookupScope->isFunctionScope())
                     // TODO: Remove the note when templates are implemented.
                     // NOTE: Functions currently can't have templates. 
-                    // Get the prototype of the function instead of the functions 
+                    // Get  the prototype of the function instead of the functions 
                     // parent scope because the function can have a template. 
                     return LookupScope->getFnPrototype();
                 return LookupScope;
         }
-    }
-
-    llvm::ArrayRef<ast::NamedDecl*> getDeclsForScope(Scope* scope) const {
-        if (scope->isFunctionScope())
-            return scope->decls();
-        return scope->getEntity()->lookup(Name).decls();
     }
  
     // This language is too stupid to understand you can just use llvm::isa.

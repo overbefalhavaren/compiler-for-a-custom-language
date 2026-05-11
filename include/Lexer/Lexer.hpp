@@ -14,6 +14,9 @@
 
 namespace c {
 
+// FIXME: FIXME: FIXME:
+// Bug in the lexer where it will skip over a 
+// character if the character after it is EOF.
 class Lexer {
 private:
     FileID FID;

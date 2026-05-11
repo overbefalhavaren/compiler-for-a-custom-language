@@ -5,8 +5,10 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 
-#include "include/AST/Container.hpp"
+#include "include/AST/DeclBase.hpp"
 #include "include/AST/Decl.hpp"
+
+#include "llvm/Support/raw_ostream.h"
 
 namespace c {
 namespace sema {
@@ -21,19 +23,19 @@ public:
     };
 private:
     ScopeFlags Flags;
-    size_t Depth;
+    size_t Depth = 0; // NOTE: Currently unused
 
     // The parent Scope of this Scope, i.e the Scope this Scope is part of
-    Scope* Parent;
-    Scope* FnProto;
+    Scope* Parent = nullptr;
+    Scope* FnProto = nullptr;
 
-    ast::Container* Entity;
+    // ast::Container* Entity = nullptr;
 
-    // NOTE: This is currently not how it actually works.
+    // NOTE: This is currently not how it actually works. Ignore the following comment.
     // This array will always be empty unless the Scope is a FunctionScope.
     // Declared as an array of Decl* so that type conversion for Scope::decls() 
     // will work. In practice this will always be an array of NamedDecl* 
-    llvm::SmallVector<ast::NamedDecl*> ScopeDecls;
+    llvm::SmallVector<ast::NamedDecl*> ScopeDecls = {};
 public:
     Scope(Scope* parent, ScopeFlags flags)
         : Parent(parent), Flags(flags) {}
@@ -59,30 +61,50 @@ public:
     }
 
     void setFnPrototype(Scope* proto) {
+        assert(proto->isFunctionPrototypeScope());
         FnProto = proto;
     }
 
-    void setEntity(ast::Container* entity) {
-        Entity = entity;
-    }
+    // void setEntity(ast::Container* entity) {
+    //     Entity = entity;
+    // }
 
-    ast::Container* getEntity() {
-        return Entity;
-    }
+    // ast::Container* getEntity() {
+    //     return Entity;
+    // }
 
     void pushDecl(ast::NamedDecl* DC) {
         ScopeDecls.push_back(DC);
     }
 
+    bool hasDecls() const {
+        return !ScopeDecls.empty();
+    }
+
     llvm::ArrayRef<ast::NamedDecl*> decls() {
-        // FIXME: This is a terrible way of doing it but it works and 
-        // right now i need to get shit done.
-        if (ScopeDecls.empty() && Entity != nullptr)
-            for (ast::Decl* DC : Entity->decls())
-                if (ast::NamedDecl* ND = llvm::dyn_cast<ast::NamedDecl>(DC))
-                    ScopeDecls.push_back(ND);
-        
+        // FIXME: Causes segfault, also a terrible solution
+        // if (ScopeDecls.empty() && Entity != nullptr)
+        //     for (ast::Decl* DC : Entity->decls())
+        //         if (ast::NamedDecl* ND = llvm::dyn_cast<ast::NamedDecl>(DC))
+        //             ScopeDecls.push_back(ND);
+
         return ScopeDecls;
+    }
+
+    bool isModuleScope() const {
+        return Flags == ModuleScope;
+    }
+
+    bool isStructScope() const {
+        return Flags == StructScope;
+    }
+
+    bool isFunctionScope() const {
+        return Flags == FunctionScope;
+    }
+
+    bool isFunctionPrototypeScope() const {
+        return Flags == FnPrototypeScope;
     }
 };
 

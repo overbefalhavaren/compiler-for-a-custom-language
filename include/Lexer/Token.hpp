@@ -102,7 +102,7 @@ private:
     SrcSpan Span;
 
     // Identifier or data for literals and identifiers.
-    llvm::StringRef Data;
+    llvm::StringRef Data = {};
 public:
     Token() = default;
     Token(TokenType type, SrcSpan&& span) 
