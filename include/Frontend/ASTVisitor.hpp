@@ -44,13 +44,13 @@ public:
         return Stream;
     }
 
-    void indent() {
-        IndentLevel++;
-    }
+    // void indent() {
+    //     IndentLevel++;
+    // }
 
-    void dedent() {
-        IndentLevel--;
-    }
+    // void dedent() {
+    //     IndentLevel--;
+    // }
 
     void print(llvm::StringRef data, bool endLine = false, std::optional<size_t> indentLevel = std::nullopt, char indentChar = ' ');
 
@@ -60,15 +60,42 @@ public:
 
     virtual void visitExpr(const ast::Expr& EX) = 0;
 
-    virtual void visitType(const ast::TypeInfo& Ty) = 0;
+    virtual void visitType(const Type* Ty, bool unfoldPointer = true) = 0;
+
+    virtual void visitTypeInfo(const ast::TypeInfo& Ty) = 0;
 };
 
 class ASTDumper : public ASTVisitor {
+private:
+    size_t LastIndentLevel = 0;
+    std::string Indent = "";
 public:
     ASTDumper(FormatFlags flags, llvm::raw_ostream& stream)
         : ASTVisitor(flags, stream) {}
 
-    void newline(bool isLast);
+    void newline(bool isLast) {
+        Stream << "\n";
+        if (isLast) {
+            Indent.pop_back();
+            Stream << Indent << "`-";
+            Indent.push_back(' ');
+        } else {
+            Stream << Indent << '-';
+        }
+    }
+
+    void indent() {
+        IndentLevel++;
+        for (size_t i = 0; i < Flags.IndentationSpaces - 1; i++)
+            Indent.push_back(' ');
+        Indent.push_back('|');
+    }
+
+    void dedent() {
+        IndentLevel--;
+        for (size_t i = 0; i < Flags.IndentationSpaces; i++)
+            Indent.pop_back();
+    }
 
     void dump(const ast::Decl* DC) {
         visitDecl(*DC);
@@ -85,8 +112,13 @@ public:
         Stream << '\n';
     }
 
+    void dump(const Type* Ty) {
+        visitType(Ty);
+        Stream << "\n";
+    }
+
     void dump(const ast::TypeInfo* Ty) {
-        visitType(*Ty);
+        visitTypeInfo(*Ty);
         Stream << '\n';
     }
 
@@ -96,7 +128,9 @@ public:
 
     void visitExpr(const ast::Expr& EX);
 
-    void visitType(const ast::TypeInfo& Ty);
+    void visitType(const Type* Ty, bool unfoldPointer = true);
+
+    void visitTypeInfo(const ast::TypeInfo& Ty);
 };
 
 // class ASTPrinter : public ASTFormatter;
