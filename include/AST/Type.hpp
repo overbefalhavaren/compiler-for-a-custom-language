@@ -35,7 +35,7 @@ public:
         return true;
     }
 
-    inline Kind getKind() const {
+    Kind getKind() const {
         return TypeKind;
     }
 
@@ -82,8 +82,11 @@ public:
         U32,
         U64,
         F32,
-        F64
+        F64,
     };
+
+    static constexpr BuiltinKind firstBuiltinKind = Bool;
+    static constexpr BuiltinKind lastBuiltinKind = F64;
 private:
     BuiltinKind BK;
 public:
@@ -92,11 +95,6 @@ public:
 
     static bool classof(const Type* d) {
         return d->getKind() == ClassKind;
-    }
-
-    static uint8_t getAmntBuiltinTypes() {
-        // Enum starts at 0, not 1
-        return (size_t)F64 + 1;
     }
 
     BuiltinKind getBuiltinKind() const {
@@ -136,11 +134,11 @@ public:
     static constexpr Kind ClassKind = PointerTypeKind;
 private:
     bool IsRawPtr;
-    Type* Pointee;
-protected:
-    PointerType(bool isRawPtr, Type* pointee)
-        : Type(ClassKind), IsRawPtr(isRawPtr), Pointee(pointee) {}
+    const Type* Pointee;
 public:
+    PointerType(bool isRawPtr, const Type* pointee)
+        : Type(ClassKind), IsRawPtr(isRawPtr), Pointee(pointee) {}
+
     static bool classof(const Type* d) {
         return d->getKind() == PointerTypeKind;
     }
@@ -149,8 +147,8 @@ public:
         return IsRawPtr;
     }
 
-    Type* getPointee() {
-        return Pointee;
+    void setPointee(const Type* T) {
+        Pointee = T;
     }
 
     const Type* getPointee() const {
@@ -162,10 +160,10 @@ class ArrayType : public Type {
 public:
     static constexpr Kind ClassKind = ArrayTypeKind;
 private:
-    Type* ElemType;
+    const Type* ElemType;
     size_t InitSize;
 public:
-    ArrayType(Type* ET, size_t size)
+    ArrayType(const Type* ET, size_t size)
         : Type(ClassKind), ElemType(ET), InitSize(size) {}
 
     static bool classof(const Type* d) {
@@ -180,10 +178,6 @@ public:
         InitSize = size;
     }
 
-    Type* getElemType() {
-        return ElemType;
-    }
-
     const Type* getElemType() const {
         return ElemType;
     }
@@ -193,7 +187,7 @@ class StructType : public Type {
 public:
     static constexpr Kind ClassKind = StructTypeKind;
 private:
-    ast::StructDecl* DC;
+    ast::StructDecl* DC = nullptr;
 public:
     StructType(ast::StructDecl* decl)
         : Type(ClassKind), DC(decl) {}

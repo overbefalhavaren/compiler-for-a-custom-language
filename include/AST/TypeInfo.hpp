@@ -17,6 +17,9 @@ class Expr; // include/AST/Expr.hpp
 class TypeInfo {
 public:
     enum Kind {
+        // Implicit
+        Implicit,
+
         // A named type, like a builtin, an alias, an enum, a struct etc
         Named,
 
@@ -29,7 +32,7 @@ public:
 private:
     Kind TypeKind;
     SrcSpan Span;
-    const Type* Resolved;
+    const Type* Resolved = nullptr;
 
     union {
         struct {
@@ -40,37 +43,34 @@ private:
         } UAdress;
         struct {
             TypeInfo* ElemType;
-            Expr* Size;
+            size_t Size;
         } UArray;
     };
 
-    TypeInfo(SrcSpan span, Kind kind, 
-        llvm::StringRef name = "", 
-        TypeInfo* pointee = nullptr, 
-        Expr* arraySize = nullptr
-    ) : Span(span), TypeKind(kind), Resolved(nullptr) {
-        if (isNamedTy()) {
-            UNamed.Name = name;
-        } else if (isPointerTy()) {
-            UAdress.Pointee = pointee;
-        } else if (isArrayTy()) {
-            UArray.ElemType = pointee;
-            UArray.Size = arraySize;
-        } else
-            llvm_unreachable("");
-    } 
+    TypeInfo(SrcSpan span, Kind kind)
+        : Span(span), TypeKind(kind) {} 
 public:
+    static TypeInfo CreateImplicit(SrcLoc expectedLocForType) {
+        return TypeInfo(SrcSpan(expectedLocForType), Implicit);
+    }
+
     static TypeInfo CreateNamed(SrcSpan span, llvm::StringRef name) {
-        return TypeInfo(span, Kind::Named, name);
+        TypeInfo result(span, Named);
+        result.UNamed.Name = name;
+        return result;
     }
 
     static TypeInfo CreatePointer(SrcSpan span, bool isRaw, TypeInfo* pointee) {
-        Kind kind = isRaw ? RawPointer : RefPointer;
-        return TypeInfo(span, kind, "", pointee);
+        TypeInfo result(span, isRaw ? RawPointer : RefPointer);
+        result.UAdress.Pointee = pointee;
+        return result;
     }
 
-    static TypeInfo CreateArray(SrcSpan span, TypeInfo* elemType, Expr* size) {
-        return TypeInfo(span, Kind::Array, "", elemType, size);
+    static TypeInfo CreateArray(SrcSpan span, TypeInfo* elemType, size_t size) {
+        TypeInfo result(span, Array);
+        result.UArray.ElemType = elemType;
+        result.UArray.Size = size;
+        return result;
     }
 
     bool isResolved() const {
@@ -94,7 +94,6 @@ public:
     }
 
     void setType(const Type* T) {
-        assert(!isResolved() && "Type is already resolved");
         Resolved = T;
     }
 
@@ -103,32 +102,29 @@ public:
         return UNamed.Name;
     }
 
-    TypeInfo* getPointeeType() {
+    TypeInfo* getPointee() {
         assert((isPointerTy() || isArrayTy()) && "Only pointers, references and arrays point to a type.");
         if (isArrayTy()) 
             return UArray.ElemType;
         return UAdress.Pointee;
     }
 
-    const TypeInfo* getPointeeType() const {
+    const TypeInfo* getPointee() const {
         assert((isPointerTy() || isArrayTy()) && "Only pointers, references and arrays point to a type.");
         if (isArrayTy())
             return UArray.ElemType;
         return UAdress.Pointee;
     }
 
-    Expr* getArraySize() {
-        assert(isArrayTy() && "Only array types have a size.");
-        return UArray.Size;
-    }
-
-    const Expr* getArraySize() const {
+    size_t getArraySize() const {
         assert(isArrayTy() && "Only array types have a size.");
         return UArray.Size;
     }
 
     bool isTypeCompatible(const Type* T) const {
-        if (isPointerTy() && T->isPointerTy()) {
+        if (isImplicitTy()) {
+            return true;
+        } if (isPointerTy() && T->isPointerTy()) {
             const PointerType* ty = llvm::cast<PointerType>(T);
             if (isRawPointerTy() && ty->isRaw())
                 return false;
@@ -141,21 +137,25 @@ public:
         return false;
     }
 
+    bool isImplicitTy() const {
+        return TypeKind == Implicit;
+    }
+
     bool isNamedTy() const {
-        return TypeKind == Kind::Named;
+        return TypeKind == Named;
     }
 
     bool isPointerTy() const {
-        return TypeKind == Kind::RawPointer ||
-               TypeKind == Kind::RefPointer;
+        return TypeKind == RawPointer ||
+               TypeKind == RefPointer;
     }
 
     bool isRawPointerTy() const {
-        return TypeKind == Kind::RawPointer;
+        return TypeKind == RawPointer;
     }
 
     bool isArrayTy() const {
-        return TypeKind == Kind::Array;
+        return TypeKind == Array;
     }
 };
 
