@@ -77,6 +77,8 @@ public:
         return StmtKind;
     }
 
+    llvm::StringRef getStmtKindName() const;
+
     void setSpan(SrcSpan span) {
         Span = span;
     }
