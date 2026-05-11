@@ -19,8 +19,8 @@ class SourceManager {
 private:
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS;
 
-    llvm::StringMap<FileID> IDCache;
-    llvm::SmallVector<Source*> SourceCache;
+    llvm::StringMap<FileID> IDCache = {};
+    llvm::SmallVector<Source*> SourceCache = {};
 public:
     SourceManager(llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> fs)
         : FS(fs) {}
