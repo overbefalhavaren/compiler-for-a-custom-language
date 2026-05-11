@@ -13,6 +13,8 @@
 #include "include/AST/TypeInfo.hpp"
 #include "include/IO/SrcSpan.hpp"
 
+#include "llvm/Support/raw_ostream.h"
+
 namespace c {
 namespace ast {
 
@@ -28,8 +30,9 @@ public:
         firstNamedDecl = firstDecl,
         
         firstTypeDecl = firstDecl,
-        EnumDeclKind = firstTypeDecl,   // NOTE: Planned but currently not implemented
-        TraitDeclKind,                  // NOTE: Planned but currently not implemented
+        TypeAliasDeclKind = firstTypeDecl,
+        EnumDeclKind,   // NOTE: Planned but currently not implemented
+        TraitDeclKind,  // NOTE: Planned but currently not implemented
         StructDeclKind,
         lastTypeDecl = StructDeclKind,
         
@@ -41,7 +44,6 @@ public:
         FieldDeclKind,
         lastInitDecl = FieldDeclKind,
 
-        TypeAliasDeclKind,
         FunctionDeclKind,
         lastValueDecl = FunctionDeclKind,
         
@@ -56,7 +58,7 @@ public:
 private:
     Kind DeclKind;
     SrcSpan Span;
-    Container* DeclContainer;
+    Container* DeclContainer = nullptr;
 protected:
     Decl(Kind DK, SrcSpan span)
         : DeclKind(DK), Span(span) {}
@@ -68,6 +70,8 @@ public:
     Kind getKind() const {
         return DeclKind;
     }
+
+    llvm::StringRef getDeclKindName() const;
 
     void setSpan(SrcSpan span) {
         Span = span;
@@ -161,6 +165,7 @@ public:
     }
 
     const Type* getType() const {
+        assert(Info != nullptr);
         return Info->getType();
     }
 };
@@ -178,7 +183,7 @@ public:
     }
 
     bool isAutoTyped() const {
-        return getTypeInfo() == nullptr;
+        return getTypeInfo()->isImplicitTy();
     }
 
     bool hasInit() const {
@@ -202,7 +207,7 @@ public:
         llvm::StringRef Name;
         Container* LookupContainer;
 
-        bool HasCachedLookup;
+        bool HasCachedLookup = false;
         llvm::ArrayRef<NamedDecl*> Lookup = {};
 
         llvm::ArrayRef<NamedDecl*>& getLookup() {
@@ -219,7 +224,7 @@ public:
         }
     public:
         LookupResult(Container* lookup, llvm::StringRef name)
-            : LookupContainer(lookup), Name(name), HasCachedLookup(false) {}
+            : LookupContainer(lookup), Name(name) {}
 
         template <typename T>
         T* get() {
@@ -228,7 +233,7 @@ public:
             
             for (NamedDecl* DC : getLookup())
                 if (isa<T>(DC))
-                    return DC;
+                    return llvm::cast<T>(DC);
             return nullptr;
         }
 
@@ -245,10 +250,10 @@ public:
     };
 private:
     Decl* This;
-    Container* Parent;
+    Container* Parent = nullptr;
 
-    llvm::SmallVector<Decl*> DeclArray;
-    llvm::StringMap<llvm::SmallVector<NamedDecl*>> LookupMap;
+    llvm::SmallVector<Decl*> DeclArray = {};
+    llvm::StringMap<llvm::SmallVector<NamedDecl*>> LookupMap = {};
 protected:
     Container(Decl* DC)
         : This(DC) {}
@@ -294,20 +299,20 @@ public:
         return DeclArray;
     }
 
-    bool isStructDecl() const {
-        return llvm::isa<StructDecl>(This);
-    }
+    // bool isStructDecl() const {
+    //     return llvm::isa<StructDecl>(This);
+    // }
 
-    bool isFunctionDecl() const {
-        return llvm::isa<FunctionDecl>(This);
-    }
+    // bool isFunctionDecl() const {
+    //     return llvm::isa<FunctionDecl>(This);
+    // }
 
-    bool isModuleDecl() const {
-        return llvm::isa<ModuleDecl>(This);
-    }
+    // bool isModuleDecl() const {
+    //     return llvm::isa<ModuleDecl>(This);
+    // }
 private:
     bool LookupMapIsConstructed() const {
-        return LookupMap.empty();
+        return !LookupMap.empty();
     }
 
     void constructLookupMap() {

@@ -40,7 +40,7 @@ class StructDecl : public TypeDecl, public Container {
 public:
     static constexpr Kind ClassKind = StructDeclKind;
 private:
-    llvm::SmallVector<FieldDecl*> Fields;
+    llvm::SmallVector<FieldDecl*> Fields = {};
 public:
     StructDecl(llvm::StringRef name)
         : TypeDecl(ClassKind, SrcSpan(), name), Container(this) {}
@@ -50,6 +50,7 @@ public:
     }
     
     void setFields(llvm::SmallVector<FieldDecl*>&& fields) {
+        // Added to the Container in the parser.
         Fields = std::move(fields);
     }
 
@@ -124,7 +125,7 @@ public:
     static constexpr Kind ClassKind = FieldDeclKind;
 private:
     size_t Index;
-    StructDecl* Parent;
+    StructDecl* Parent = nullptr;
 public:
     FieldDecl(SrcSpan span, llvm::StringRef name, size_t idx, TypeInfo* info, Expr* init)
         : InitDecl(ClassKind, span, name, info, init), Index(idx) {}
@@ -154,8 +155,8 @@ class FunctionDecl : public ValueDecl, public Container {
 public:
     static constexpr Kind ClassKind = FunctionDeclKind;
 private:
-    llvm::SmallVector<ParamDecl*> Parameters;
-    BlockStmt* Body;
+    llvm::SmallVector<ParamDecl*> Parameters = {};
+    BlockStmt* Body = nullptr;
 public:
     FunctionDecl(llvm::StringRef name)
         : ValueDecl(ClassKind, SrcSpan(), name, nullptr), Container(this) {}
@@ -181,7 +182,7 @@ public:
     }
 
     bool hasParams() const {
-        return Parameters.size() != 0;
+        return !Parameters.empty();
     }
 
     void setParams(llvm::SmallVector<ParamDecl*>&& params) {
@@ -215,6 +216,10 @@ public:
 
     ModuleDecl(SrcSpan span, llvm::StringRef name)
         : NamedDecl(ClassKind, span, name), Container(this) {}
+
+    static bool classof(const Decl* DC) {
+        return DC->getKind() == ClassKind;
+    } 
 };
 
 } // namespace ast
