@@ -20,14 +20,14 @@ class FieldDecl; // include/AST/Decl.hpp
 
 class Expr : public Stmt {
 private:
-    const Type* Ty;
+    const Type* Ty = nullptr;
 protected:
-    Expr(Kind SK, Type* T, SrcSpan span)
-        : Stmt(SK, span), Ty(T) {}
+    Expr(Kind SK, SrcSpan span)
+        : Stmt(SK, span) {}
 public:
     static bool classof(const Stmt* s) {
-        return s->getKind() <= firstExpr && 
-               s->getKind() >= lastExpr;
+        return s->getKind() >= firstExpr && 
+               s->getKind() <= lastExpr;
     }
 
     const Type* getType() const {
@@ -38,9 +38,13 @@ public:
         Ty = T;
     }
 
+    bool isResolved() const {
+        return Ty != nullptr;
+    }
+
     bool isTypeDependant() const;
 
-    bool isStorageLocation() const;
+    bool isPlace() const;
 
     bool isModifiableValue() const;
 
@@ -51,8 +55,8 @@ class QualExpr : public Expr {
 private:
     Expr* Base;
 protected:
-    QualExpr(Kind SK, Type* T, SrcSpan span, Expr* base)
-        : Expr(SK, T, span), Base(base) {}
+    QualExpr(Kind SK, SrcSpan span, Expr* base)
+        : Expr(SK, span), Base(base) {}
 public:
     static bool classof(const Stmt* s) {
         return s->getKind() >= firstQualExpr && 
@@ -73,10 +77,10 @@ public:
     static constexpr Kind ClassKind = AccessExprKind;
 private:
     llvm::StringRef Name;
-    FieldDecl* Field;
+    FieldDecl* Field = nullptr;
 public:
-    AccessExpr(SrcSpan span, Type* T, Expr* base, llvm::StringRef name)
-        : QualExpr(ClassKind, T, span, base), Name(name) {}
+    AccessExpr(SrcSpan span, Expr* base, llvm::StringRef name)
+        : QualExpr(ClassKind, span, base), Name(name) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -87,6 +91,10 @@ public:
     }
     
     FieldDecl* getFieldDecl() {
+        return Field;
+    }
+
+    const FieldDecl* getFieldDecl() const {
         return Field;
     }
 
@@ -107,8 +115,8 @@ private:
     // TODO: Consider supporting python-like slicing for 
     // matrixes, like for example: array[start:end, start:end]
 public:
-    SliceExpr(SrcSpan span, Type* T, Expr* base, Expr* start)
-        : QualExpr(ClassKind, T, span, base), Start(start) {}
+    SliceExpr(SrcSpan span, Expr* base, Expr* start)
+        : QualExpr(ClassKind, span, base), Start(start) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -137,10 +145,10 @@ public:
 
         Equal,
         NotEqual,
-        MoreThan,
-        LessThan,
-        MTEqual,
-        LTEqual,
+        MoreThan, // >
+        LessThan, // <
+        MTEqual,  // >=
+        LTEqual,  // <=
 
         And,
         Or
@@ -151,7 +159,7 @@ private:
     Expr* RHS;
 public:
     BinaryOperator(SrcSpan span, OpKind op, Expr* lhs, Expr* rhs)
-        : Expr(ClassKind, nullptr, span), Op(op), LHS(lhs), RHS(rhs) {}
+        : Expr(ClassKind, span), Op(op), LHS(lhs), RHS(rhs) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -223,13 +231,13 @@ public:
 private:
     // Only used in combination with Deref or Adress. Indicates
     // wether the pointer is raw or a reference.
-    bool IsRawPtr;
+    bool IsRawPtr = false;
 
     OpKind Op;
     Expr* Sub;
 public:
     UnaryOperator(SrcSpan span, OpKind op, Expr* sub, bool isRawPtr = false)
-        : Expr(ClassKind, nullptr, span), Op(op), Sub(sub), IsRawPtr(isRawPtr) {}
+        : Expr(ClassKind, span), Op(op), Sub(sub), IsRawPtr(isRawPtr) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -292,13 +300,13 @@ public:
     static constexpr Kind ClassKind = CallExprKind;
 private:
     // Pointer to the declaration of the callee. Can be either FunctionDecl* or StructDecl*
-    Decl* DC;
+    NamedDecl* DC = nullptr;
 
     llvm::StringRef Callee;
-    llvm::SmallVector<Expr*> Arguments;
+    llvm::SmallVector<Expr*> Arguments = {};
 public:
     CallExpr(SrcSpan span, llvm::StringRef callee)
-        : Expr(ClassKind, nullptr, span), Callee(callee) {}
+        : Expr(ClassKind, span), Callee(callee) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -308,15 +316,15 @@ public:
         return Callee;
     }
 
-    Decl* getCalleeDecl() {
+    NamedDecl* getCalleeDecl() {
         return DC;
     }
 
-    const Decl* getCalleeDecl() const {
+    const NamedDecl* getCalleeDecl() const {
         return DC;
     }
 
-    void setCalleeDecl(Decl* decl) {
+    void setCalleeDecl(NamedDecl* decl) {
         DC = decl;
     }
 
@@ -339,10 +347,6 @@ public:
     llvm::ArrayRef<Expr*> arguments() const {
         return Arguments;
     }
-    
-    llvm::MutableArrayRef<Expr*> arguments() {
-        return llvm::MutableArrayRef<Expr*>(Arguments.begin(), Arguments.end());
-    }
 };
 
 class DeclRefExpr : public Expr {
@@ -350,10 +354,12 @@ public:
     static constexpr Kind ClassKind = DeclRefExprKind;
 private:
     llvm::StringRef Name;
-    Decl* DC;
+
+    // Can be FunctionDecl or VarDecl
+    NamedDecl* DC = nullptr;
 public:
     DeclRefExpr(SrcSpan span, llvm::StringRef name)
-        : Expr(DeclRefExprKind, nullptr, span), Name(name), DC(nullptr) {}
+        : Expr(ClassKind, span), Name(name) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -363,15 +369,15 @@ public:
         return Name;
     }
 
-    void setDecl(ast::Decl* decl) {
+    void setDecl(NamedDecl* decl) {
         DC = decl;
     }
 
-    Decl* getDecl() {
+    NamedDecl* getDecl() {
         return DC;
     }
 
-    const Decl* getDecl() const {
+    const NamedDecl* getDecl() const {
         return DC;
     }
 };
@@ -380,13 +386,26 @@ class ArrayLiteral : public Expr {
 public:
     static constexpr Kind ClassKind = ArrayLiteralKind;
 private:
+    bool IsConstant = false;
     llvm::SmallVector<Expr*> Items;
 public: 
-    ArrayLiteral(SrcSpan span, Type* T, llvm::ArrayRef<Expr*> items)
-        : Expr(ClassKind, T, span), Items(items) {}
+    ArrayLiteral(SrcSpan span, llvm::SmallVector<Expr*>&& items = {})
+        : Expr(ClassKind, span), Items(std::move(items)) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
+    }
+
+    bool isConstant() const {
+        return IsConstant;
+    }
+
+    void setConstant(bool v) {
+        IsConstant = v;
+    }
+
+    void setItems(llvm::SmallVector<Expr*>&& items) {
+        Items = std::move(items);
     }
 
     size_t getAmntItems() const {
@@ -397,16 +416,12 @@ public:
         return Items[idx];
     }
 
-    const Expr* getInit(size_t idx) const {
+    const Expr* getItem(size_t idx) const {
         return Items[idx];
     }
 
-    llvm::ArrayRef<Expr*> itmes() const {
+    llvm::ArrayRef<Expr*> items() const {
         return Items;
-    }
-
-    llvm::MutableArrayRef<Expr*> items() {
-        return llvm::MutableArrayRef<Expr*>(Items.begin(), Items.end());
     }
 };
 
@@ -417,7 +432,7 @@ private:
     llvm::APInt Value;
 public:
     IntegerLiteral(SrcSpan span, llvm::APInt value)
-        : Expr(ClassKind, nullptr, span), Value(value) {}
+        : Expr(ClassKind, span), Value(value) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -439,7 +454,7 @@ private:
     llvm::APFloat Value;
 public:
     FloatingLiteral(SrcSpan span, llvm::APFloat value)
-        : Expr(ClassKind, nullptr, span), Value(value) {}
+        : Expr(ClassKind, span), Value(value) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -460,8 +475,8 @@ public:
 private:
     bool Value;
 public:
-    BooleanLiteral(SrcSpan span, Type* T, bool value)
-        : Expr(ClassKind, T, span), Value(value) {}
+    BooleanLiteral(SrcSpan span, bool value)
+        : Expr(ClassKind, span), Value(value) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;

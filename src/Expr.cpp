@@ -11,7 +11,7 @@ bool Expr::isTypeDependant() const {
     return false; 
 }
 
-bool Expr::isStorageLocation() const {
+bool Expr::isPlace() const {
     // NOTE: This switch statement only includes expression kinds that 
     // are implemented and have classes implemented for them.
     switch (getKind()) {
@@ -22,12 +22,12 @@ bool Expr::isStorageLocation() const {
             if (llvm::cast<UnaryOperator>(this)->isDerefOp())
                 return true;
             return false;
-        case BinaryOperatorKind:
-            // Expressions like "a = b = c" are allowed
-            if (llvm::cast<BinaryOperator>(this)->isAssignOp()) // FIXME: Might be wrong
+
+        case CallExprKind:
+            if (llvm::isa<StructDecl>(llvm::cast<CallExpr>(this)->getCalleeDecl()))
                 return true;
             return false;
-
+        
         // TODO: When we implement things like function pointers, namespaces, 
         // templates and etc, DeclRefExpr will be able to point to almost any
         // kind of NamedDecl. Logic for this will need to be implemented.
@@ -51,7 +51,7 @@ bool Expr::isStorageLocation() const {
             // assignable memory location.
             return true;
         
-        case CallExprKind:
+        case BinaryOperatorKind:
         case ArrayLiteralKind:
         case FloatingLiteralKind:
         case IntegerLiteralKind:
@@ -61,7 +61,7 @@ bool Expr::isStorageLocation() const {
 }
 
 bool Expr::isModifiableValue() const {
-    if (!isStorageLocation())
+    if (!isPlace())
         return false;
     if (llvm::isa<DeclRefExpr>(this)) {
         const Decl* DC = llvm::cast<DeclRefExpr>(this)->getDecl();
