@@ -100,11 +100,13 @@ private:
 public:
     SrcSpan(const FileID& id, uint32_t start, uint32_t end) 
         : ID(id), Start(start), End(end) {
-            assert(ID.isValid() && "Can't make a span from an invalid FileID.");
-            assert(Start <= End && "The start of a span can't be larger than the end.");
-        }
+        assert(ID.isValid() && "Can't make a span from an invalid FileID.");
+        assert(Start <= End && "The start of a span can't be larger than the end.");
+    }
 // public:
     SrcSpan() = default;
+    SrcSpan(const SrcLoc& loc)
+        : SrcSpan(loc.getID(), loc.getOffset(), loc.getOffset()) {}
     SrcSpan(const SrcLoc& start, const SrcLoc& end)
         : SrcSpan(start.getID(), start.getOffset(), end.getOffset()) {
         assert(start.getID() == end.getID() && "Can't make a span from locations in different files.");
