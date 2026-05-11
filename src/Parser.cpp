@@ -10,8 +10,9 @@
 #include "include/AST/Expr.hpp"
 #include "include/AST/Stmt.hpp"
 #include "include/AST/TypeInfo.hpp"
+#include "include/IO/SrcSpan.hpp"
 
-#define DEBUG(MSG) llvm::outs() << MSG << "\n";
+#include "src/Debug.hpp"
 
 using namespace c;
 using namespace c::ast;
@@ -137,7 +138,7 @@ public:
     }
 
     Expr* parsePrefix() {
-        DEBUG("\nCalled: parsePrefix");
+        DEBUG("Called: parsePrefix");
         switch (P.peekToken().getType()) {
             default:
                 llvm::outs() << "Invalid token: " << strTokenType(P.peekToken().getType()) << ".\n";
@@ -149,6 +150,8 @@ public:
             case TokenType::Star:
             case TokenType::Ampersand:
                 return parseUnaryPrefixOperator();
+            case TokenType::LBrack:
+                return parseArrayLiteral();
             case TokenType::Int:
                 return parseIntegerLiteral();
             case TokenType::Float:
@@ -166,7 +169,7 @@ public:
     }
 
     Expr* parseExpr(uint8_t minBP = 0) {
-        DEBUG("\nCalled: parseExpr");
+        DEBUG("Called: parseExpr");
         Expr* lhs = parsePrefix();
         if (!lhs) return nullptr;
 
@@ -201,8 +204,42 @@ public:
         return lhs;
     }
 
+    ArrayLiteral* parseArrayLiteral() {
+        DEBUG("Called: parseArrayLiteral");
+        assert(P.peekToken().is(TokenType::LBrack));
+        SrcLoc start = P.peekToken().getStartLoc();
+        llvm::SmallVector<Expr*> items;
+        if (P.nextToken().isNot(TokenType::RBrack))
+            while (true) {
+                if (P.peekToken().is(TokenType::Eof)) {
+                    llvm::outs() << "Unclosed function call. Expected ')'.\n";
+                    return nullptr;
+                }
+                
+                Expr* next = parseExpr();
+                if (!next) return nullptr;
+
+                items.push_back(next);
+
+                if (P.peekToken().is(TokenType::RBrack)) {
+                    break;
+                } else if (P.peekToken().is(TokenType::Comma)) {
+                    if (P.nextToken().is(TokenType::RBrack)) {
+                        llvm::outs() << "Unnessesary ','.\n";
+                        return nullptr;
+                    }
+                } else
+                    (void)P.nextToken();
+            }
+
+        SrcSpan span(start, P.peekToken().getEndLoc());
+
+        (void)P.nextToken();
+        return Alloc.Create<ArrayLiteral>(span, std::move(items));
+    }
+
     IntegerLiteral* parseIntegerLiteral() {
-        DEBUG("\nCalled: parseIntegerLiteral");
+        DEBUG("Called: parseIntegerLiteral");
         SrcSpan span = P.peekToken().getSpan();
 
         llvm::APInt value;
@@ -219,7 +256,7 @@ public:
     }
 
     FloatingLiteral* parseFloatingLiteral() {
-        DEBUG("\nCalled: parseFloatingLiteral");
+        DEBUG("Called: parseFloatingLiteral");
         SrcSpan span = P.peekToken().getSpan();
 
         llvm::APFloat value(llvm::APFloat::IEEEdouble());
@@ -237,7 +274,7 @@ public:
     }
 
     Expr* parseUnaryPrefixOperator() {
-        DEBUG("\nCalled: parseUnaryPrefixOperator");
+        DEBUG("Called: parseUnaryPrefixOperator");
         TokenType op = P.peekToken().getType();
         SrcLoc start = P.peekToken().getStartLoc();
 
@@ -251,7 +288,7 @@ public:
     }
 
     Expr* parseParenthesis() {
-        DEBUG("\nCalled: parseParethesis");
+        DEBUG("Called: parseParethesis");
         (void)P.nextToken();
         ast::Expr* result = parseExpr(0);
         if (P.peekToken().isNot(TokenType::RParen)) {
@@ -263,20 +300,9 @@ public:
         return result;
     }
 
-    Expr* parseIdentifier() {
-        DEBUG("\nCalled: parseIdentifier");
-        if (P.peekToken().isNot(TokenType::LParen)) { // Not a CallExpr
-            SrcSpan span = P.peekToken().getSpan();
-            llvm::StringRef name = P.peekToken().getData();
-
-            (void)P.nextToken();
-            return Alloc.Create<DeclRefExpr>(
-                P.peekToken().getSpan(), P.peekToken().getData()
-            );
-        }
-        
-        SrcLoc start = P.peekToken().getStartLoc();
-        auto result = Alloc.Create<CallExpr>(SrcSpan(), P.peekToken().getData());
+    Expr* parseCallExpr(llvm::StringRef name, SrcLoc start) {
+        DEBUG("Called: CallExpr");
+        auto result = Alloc.Create<CallExpr>(SrcSpan(), name);
 
         llvm::SmallVector<Expr*> args;
         if (P.nextToken().isNot(TokenType::RParen))
@@ -285,7 +311,7 @@ public:
                     llvm::outs() << "Unclosed function call. Expected ')'.\n";
                     return nullptr;
                 }
-
+                
                 Expr* next = parseExpr();
                 if (!next) return nullptr;
 
@@ -293,21 +319,60 @@ public:
 
                 if (P.peekToken().is(TokenType::RParen)) {
                     break;
-                } else if (P.peekToken().is(TokenType::Comma)) 
+                } else if (P.peekToken().is(TokenType::Comma)) {
                     if (P.nextToken().is(TokenType::RParen)) {
                         llvm::outs() << "Unnessesary ','.\n";
                         return nullptr;
                     }
-                
-                (void)P.nextToken();
+                } else
+                    (void)P.nextToken();
             }
 
-        SrcSpan span(start, P.peekToken().getEndLoc());
         result->setArguments(std::move(args));
         result->setSpan(SrcSpan(start, P.peekToken().getEndLoc()));
 
         (void)P.nextToken();
         return result;
+    }
+    
+    Expr* parseIdentifier() {
+        DEBUG("Called: parseIdentifier");
+        assert(P.peekToken().is(TokenType::Identifier));
+        llvm::StringRef name = P.peekToken().getData();
+        SrcSpan start_span = P.peekToken().getSpan();
+
+        Expr* base;
+        if (P.nextToken().isNot(TokenType::LParen)) {
+            base = Alloc.Create<DeclRefExpr>(start_span, name);
+        } else 
+            base = parseCallExpr(name, start_span.getStart()); 
+
+        if (P.peekToken().is(TokenType::Dot)) {
+            if (P.nextToken().isNot(TokenType::Identifier)) {
+                llvm::outs() << "Expected identifier.\n";
+                return nullptr;
+            }
+
+            llvm::StringRef field_name = P.peekToken().getData();
+            SrcSpan span(start_span.getStart(), P.peekToken().getEndLoc());
+
+            (void)P.nextToken();
+            return Alloc.Create<AccessExpr>(span, base, field_name);
+        } else if (P.peekToken().is(TokenType::LBrack)) {
+            (void)P.nextToken();
+            Expr* start = parseIntegerLiteral();
+            if (P.nextToken().isNot(TokenType::RBrack)) {
+                llvm::outs() << "Expected closing ']'\n";
+                return nullptr;
+            }
+
+            SrcSpan span(start_span.getStart(), P.peekToken().getEndLoc());
+
+            (void)P.nextToken();
+            return Alloc.Create<SliceExpr>(span, base, start);
+        }
+
+        return base;
     }
 };
 
@@ -321,7 +386,7 @@ public:
         : P(parser), Pratt(pratt), Alloc(alloc) {}
 
     Decl* parseDecl() {
-        DEBUG("\nCalled: parseDecl");
+        DEBUG("Called: parseDecl");
         switch (P.peekToken().getType()) {
             default:
                 llvm::outs() << "Only variable, type, struct, impl and function declarations"
@@ -346,7 +411,7 @@ public:
     }
 
     Stmt* parseStmt() {
-        DEBUG("\nCalled: parseStmt");
+        DEBUG("Called: parseStmt");
         switch (P.peekToken().getType()) {
             case TokenType::Type: {
                 ast::TypeAliasDecl* DC = parseTypeAiasDecl();
@@ -373,27 +438,72 @@ public:
     }
 
     Expr* parseExpr() {
-        DEBUG("\nCalled: parseExpr (RecusiveDecentParser)");
+        DEBUG("Called: parseExpr (RecusiveDecentParser)");
         return Pratt.parseExpr();
     }
 
     TypeInfo* parseTypeRef() {
-        DEBUG("\nCalled: parseTypeRef");
-        if (P.peekToken().isNot(TokenType::Identifier)) {
+        DEBUG("Called: parseTypeRef");
+        if (P.peekToken().is(TokenType::LBrack)) {
+            SrcLoc start = P.peekToken().getStartLoc();
+
+            (void)P.nextToken();
+            TypeInfo* pointee = parseTypeRef();
+
+            size_t size = 0;
+            if (P.peekToken().is(TokenType::Colon)) {
+                if (P.nextToken().isNot(TokenType::Int)) {
+                    llvm::outs() << "Expected an integer literal for the size of the array.\n";
+                    return nullptr;
+                }
+
+                if (P.peekToken().getData().getAsInteger(10, size))
+                    // Indicates an error probably in the lexer with how integer literals are
+                    // matched or with how the tokens are constructed.
+                    llvm_unreachable("'Data' for integer literal token was not an integer literal.");
+                
+                if (P.nextToken().isNot(TokenType::RBrack)) {
+                    llvm::outs() << "Expected ']' to close the array type.\n";
+                    return nullptr;
+                }
+            } else if (!P.peekToken().is(TokenType::RBrack)) {
+                llvm::outs() << "Invalid array type, expected ':' or ']'.\n";
+                return nullptr;
+            }
+            
+            SrcSpan span(start, P.peekToken().getEndLoc());
+
+            (void)P.nextToken();
+            return Alloc.Create<TypeInfo>(TypeInfo::CreateArray(span, pointee, size));
+        } else if (P.peekToken().isNot(TokenType::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
             return nullptr;
         }
 
-        auto result =  Alloc.Create<TypeInfo>(TypeInfo::CreateNamed(
+        auto result = Alloc.Create<TypeInfo>(TypeInfo::CreateNamed(
             P.peekToken().getSpan(), P.peekToken().getData()
         ));
 
         (void)P.nextToken();
+        if (P.peekToken().is(TokenType::Star) ||
+            P.peekToken().is(TokenType::Ampersand)) {
+            SrcLoc start = result->getStartLoc();
+            do {
+                result = Alloc.Create<TypeInfo>(TypeInfo::CreatePointer(
+                    SrcSpan(start, P.peekToken().getEndLoc()),
+                    P.peekToken().is(TokenType::Star) ? true : false,
+                    result
+                ));
+                (void)P.nextToken();
+            } while (P.peekToken().is(TokenType::Star) ||
+                     P.peekToken().is(TokenType::Ampersand));
+        }
+
         return result;
     }
 
     TypeAliasDecl* parseTypeAiasDecl() {
-        DEBUG("\nCalled: parseTypeAliasDecl");
+        DEBUG("Called: parseTypeAliasDecl");
         SrcLoc start = P.peekToken().getStartLoc();
         if (P.nextToken().isNot(TokenType::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
@@ -416,12 +526,15 @@ public:
     }
 
     bool parseInitDecl(SrcLoc& end, llvm::StringRef& name, TypeInfo*& info, Expr*& init) {
-        DEBUG("\nCalled: parseInitDecl");
+        DEBUG("Called: parseInitDecl");
         if (P.peekToken().isNot(TokenType::Identifier)) {
-            llvm::outs() << "Expected identifier.\n";
+            llvm::outs() << "Expected identifier, got '" << strTokenType(P.peekToken().getType()) <<"'.\n";
             return true;
         }
         name = P.peekToken().getData();
+
+        // Only used for the else case to create an SrcLoc for the implicit type.
+        size_t colon_offset = P.peekToken().getEndLoc().getOffset() + 1;
 
         if (P.nextToken().is(TokenType::Colon)) {
             (void)P.nextToken();
@@ -430,7 +543,10 @@ public:
         } else if (!P.peekToken().is(TokenType::Equal)) {
             llvm::outs() << "Expected ':' or '='.\n";
             return true;
-        }
+        } else 
+            info = Alloc.Create<TypeInfo>(TypeInfo::CreateImplicit(
+                SrcLoc(P.peekToken().getSpan().getID(), colon_offset)
+            ));
 
         if (P.peekToken().is(TokenType::Equal)) {
             (void)P.nextToken();
@@ -444,7 +560,7 @@ public:
     }
 
     VarDecl* parseVarDecl() {
-        DEBUG("\nCalled: parseVarDecl");
+        DEBUG("Called: parseVarDecl");
         VarDecl::Mutability mutability;
         if (P.peekToken().is(TokenType::Const)) {
             mutability = VarDecl::Constant;
@@ -471,7 +587,7 @@ public:
     }
 
     ParamDecl* parseParamDecl() {
-        DEBUG("\nCalled: parseParamDecl");
+        DEBUG("Called: parseParamDecl");
         SrcLoc start = P.peekToken().getStartLoc();
 
         SrcLoc end;
@@ -487,7 +603,7 @@ public:
     }
 
     FieldDecl* parseFieldDecl(size_t fieldIndex) {
-        DEBUG("\nCalled: parseFieldDecl");
+        DEBUG("Called: parseFieldDecl");
         SrcLoc start = P.peekToken().getStartLoc();
 
         SrcLoc end;
@@ -503,7 +619,7 @@ public:
     }
 
     StructDecl* parseStructDecl() {
-        DEBUG("\nCalled: parseStructDecl");
+        DEBUG("Called: parseStructDecl");
         SrcLoc start = P.peekToken().getStartLoc();
         if (P.nextToken().isNot(TokenType::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
@@ -516,9 +632,11 @@ public:
             return nullptr;
         }
 
+        (void)P.nextToken();
         StructDecl* result = Alloc.Create<StructDecl>(name);
         llvm::SmallVector<FieldDecl*> fields;
-        while (P.nextToken().isNot(TokenType::End)) {
+        // while (P.nextToken().isNot(TokenType::End)) {
+        while (P.peekToken().isNot(TokenType::End)) {
             if (P.peekToken().is(TokenType::Eof)) {
                 llvm::outs() << "Unclosed struct declaration. Expected 'end'.\n";
                 return nullptr;
@@ -539,7 +657,7 @@ public:
     }
 
     FunctionDecl* parseFunctionDecl() {
-        DEBUG("\nCalled: parseFunctionDecl");
+        DEBUG("Called: parseFunctionDecl");
         SrcLoc start = P.peekToken().getStartLoc();
         if (P.nextToken().isNot(TokenType::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
@@ -580,6 +698,7 @@ public:
         // in case the function doesn't have a return type.
         SrcLoc end = P.peekToken().getEndLoc();
 
+        result->setParams(std::move(parameters));
         if (P.nextToken().is(TokenType::Arrow)) {
             (void)P.nextToken();
             TypeInfo* type = parseTypeRef();
@@ -602,7 +721,7 @@ public:
     }
 
     BlockStmt* parseBlockStmt() {
-        DEBUG("\nCalled: parseBlockStmt");
+        DEBUG("Called: parseBlockStmt");
         assert(P.peekToken().is(TokenType::Colon));
 
         SrcLoc start = P.peekToken().getStartLoc();
@@ -635,7 +754,7 @@ public:
     }
 
     Stmt* parseStmtBody() {
-        DEBUG("\nCalled: parseStmtBody");
+        DEBUG("Called: parseStmtBody");
         if (P.peekToken().is(TokenType::Colon))
             return parseBlockStmt();
         // FIXME: Should also look for an Expr as well
@@ -643,7 +762,7 @@ public:
     }
 
     IfStmt* parseIfStmt() {
-        DEBUG("\nCalled: parseIfStmt");
+        DEBUG("Called: parseIfStmt");
         SrcLoc start = P.peekToken().getStartLoc();
 
         (void)P.nextToken(); // Skip leading If token
@@ -669,7 +788,7 @@ public:
     }
 
     WhileStmt* parseWhileStmt() {
-        DEBUG("\nCalled: parseWhileStmt");
+        DEBUG("Called: parseWhileStmt");
         SrcLoc start = P.peekToken().getStartLoc();
 
         // FIXME: Currently doesn't allow a declaration within the condition.
@@ -686,7 +805,7 @@ public:
     }
 
     ReturnStmt* parseReturnStmt() {
-        DEBUG("\nCalled: parseReturnStmt");
+        DEBUG("Called: parseReturnStmt");
         SrcLoc start = P.peekToken().getStartLoc();
         SrcLoc end = P.peekToken().getEndLoc();
 
@@ -705,7 +824,7 @@ public:
 namespace c {
 
 bool Parser::parse(ModuleDecl& result) {
-    DEBUG("\nCalled: parse");
+    DEBUG("Called: parse");
     if (peekToken().is(TokenType::Eof))
         return true;
 
