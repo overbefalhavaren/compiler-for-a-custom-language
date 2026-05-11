@@ -11,25 +11,42 @@ namespace c {
 
 class ASTAllocator {
 private:
-    llvm::BumpPtrAllocator Allocator;
-
-    llvm::DenseMap<BuiltinType::BuiltinKind, BuiltinType*> Builtins;
+    llvm::BumpPtrAllocator Allocator = {};
+    llvm::SmallVector<BuiltinType> Builtins = {};
 public:
     ASTAllocator() = default;
     ~ASTAllocator() = default;
 
     void createBuiltinTypes() {
-        uint8_t amnt_builtins = BuiltinType::getAmntBuiltinTypes();
-        Builtins.grow(amnt_builtins);
-        for (uint8_t k = 0; k < amnt_builtins; k++) {
+        BuiltinType::BuiltinKind first = BuiltinType::firstBuiltinKind;
+        BuiltinType::BuiltinKind last = BuiltinType::lastBuiltinKind;
+
+        Builtins.reserve(last + 1);
+        for (uint8_t k = first; k <= last; k++) {
             auto kind = static_cast<BuiltinType::BuiltinKind>(k);
-            Builtins.insert({kind, new BuiltinType(kind)}); // FIXME: I don't like "new"
+            assert(kind <= last && kind >= first);
+            Builtins.push_back(BuiltinType(kind));
         }
     }
 
-    const BuiltinType* getBuiltinType(BuiltinType::BuiltinKind kind) {
+    const BuiltinType* getBuiltinType(BuiltinType::BuiltinKind kind) const {
         assert(!Builtins.empty() && "Builtins were never created. Call ASTAllocator::createBuiltinTypes()");
-        return Builtins.lookup(kind);
+        assert(kind <= Builtins.size());
+        auto result = &Builtins[kind];
+        assert(result->getBuiltinKind() == kind);
+        return result;
+    }
+
+    const BuiltinType* getIntegerType() const {
+        return getBuiltinType(BuiltinType::I32);
+    }
+
+    const BuiltinType* getFloatingType() const {
+        return getBuiltinType(BuiltinType::I32);
+    }
+
+    const BuiltinType* getBooleanType() const {
+        return getBuiltinType(BuiltinType::Bool);
     }
 
     void* Allocate(size_t amnt, size_t align) {
