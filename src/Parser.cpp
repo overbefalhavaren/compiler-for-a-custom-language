@@ -212,7 +212,7 @@ public:
         if (P.nextToken().isNot(TokenType::RBrack))
             while (true) {
                 if (P.peekToken().is(TokenType::Eof)) {
-                    llvm::outs() << "Unclosed function call. Expected ')'.\n";
+                    llvm::outs() << "Unclosed array literal. Expected ']'.\n";
                     return nullptr;
                 }
                 
@@ -361,7 +361,7 @@ public:
         } else if (P.peekToken().is(TokenType::LBrack)) {
             (void)P.nextToken();
             Expr* start = parseIntegerLiteral();
-            if (P.nextToken().isNot(TokenType::RBrack)) {
+            if (P.peekToken().isNot(TokenType::RBrack)) {
                 llvm::outs() << "Expected closing ']'\n";
                 return nullptr;
             }
