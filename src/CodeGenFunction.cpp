@@ -29,20 +29,29 @@ void CodeGenFunction::emit(const FunctionDecl& DC) {
     
     emitBlockStmt(*DC.getBody());
 
-    if (!build_block->getTerminator())
+    if (!Builder.GetInsertBlock()->getTerminator())
         (void)Builder.CreateRetVoid();
 }
 
 void CodeGenFunction::emitVarDecl(const VarDecl& DC) {
     DEBUG("Called: emitVarDecl");
-    llvm::Type* ty = CGM.getTypes().convertType(DC.getType());
-    llvm::Value* alloca = Builder.CreateAlloca(ty, nullptr, DC.getName());
-
     assert(DC.hasInit());
-    Value value = emitExpr(DC.getInit());
-    (void)Builder.CreateStore(value.getValue(), alloca);
+    if (DC.getInit()->isPlace()) {
+        (void)Locals.insert({&DC, emitPlace(DC.getInit())});
+        return;
+    }
 
-    (void)Locals.insert({&DC, Place(alloca, DC.getType())});
+    llvm::Type* ty = CGM.getTypes().convertType(DC.getType());
+    auto align = CGM.getModule().getDataLayout().getABITypeAlign(ty);
+
+    llvm::AllocaInst* alloca = Builder.CreateAlloca(ty, nullptr, DC.getName());
+    alloca->setAlignment(align);
+
+    Value value = emitExpr(DC.getInit());
+    Place ptr = Place(alloca, DC.getType());
+    emitStore(ptr, value);
+
+    (void)Locals.insert({&DC, ptr});
 }
 
 void CodeGenFunction::emitParamDecl(const ParamDecl& DC, llvm::Argument* Arg) {
@@ -92,7 +101,10 @@ void CodeGenFunction::emitBlockStmt(const BlockStmt& ST) {
     DEBUG("Called: emitBlockStmt");
     for (const Stmt* s : ST.stmts())
         if (auto EX = llvm::dyn_cast<Expr>(s)) {
-            (void)emitExpr(EX);
+            if (EX->isPlace()) {
+                (void)emitPlace(EX);
+            } else
+                (void)emitExpr(EX);
         } else
             emitStmt(s);
 }
@@ -166,7 +178,11 @@ void CodeGenFunction::emitReturnStmt(const ReturnStmt& ST) {
 
 void CodeGenFunction::emitStore(Place ptr, Value val) {
     DEBUG("Called: emitStore");
-    (void)Builder.CreateStore(val.getValue(), ptr.getPointer());
+    llvm::Type* ty = CGM.getTypes().convertType(ptr.getType());
+    llvm::Align align = CGM.getModule().getDataLayout().getABITypeAlign(ty);
+
+    llvm::StoreInst* store = Builder.CreateStore(val.getValue(), ptr.getPointer());
+    store->setAlignment(align);
 }
 
 Value CodeGenFunction::emitLoad(Place ptr) {
@@ -529,7 +545,7 @@ Place CodeGenFunction::emitConstructCall(const CallExpr& EX) {
     DEBUG("Called: emitConstructCall");
     assert(llvm::isa<StructType>(EX.getType()));
     llvm::Type* ty = CGM.getTypes().convertType(EX.getType());
-    llvm::Value* alloca = Builder.CreateAlloca(ty);
+    llvm::AllocaInst* alloca = Builder.CreateAlloca(ty);
     for (size_t i = 0; i < EX.getAmntArgs(); i++)
         (void)Builder.CreateStore(
             emitExpr(EX.getArg(i)).getValue(),
@@ -557,8 +573,8 @@ Place CodeGenFunction::emitDeclRef(const DeclRefExpr& EX) {
 Place CodeGenFunction::emitAccessExpr(const AccessExpr& EX) {
     DEBUG("Called: emitAccessExpr");
     llvm::Value* field = Builder.CreateStructGEP(
-        CGM.getTypes().convertType(EX.getType()),
-        emitExpr(EX.getBase()).getValue(),
+        CGM.getTypes().convertType(EX.getBase()->getType()),
+        emitPlace(EX.getBase()).getPointer(),
         EX.getFieldDecl()->getFieldIndex()
     );
 
@@ -569,8 +585,8 @@ Place CodeGenFunction::emitSliceExpr(const SliceExpr& EX, bool doBoundsCheck) {
     DEBUG("Called: emitSliceExpr");
     llvm::Value* index = emitExpr(EX.getStart()).getValue();
     if (doBoundsCheck) {
-        auto ok_block = llvm::BasicBlock::Create(CGM.getContext(), "in_bounds", Fn);
         auto trap_block = llvm::BasicBlock::Create(CGM.getContext(), "out_of_bounds", Fn);
+        auto ok_block = llvm::BasicBlock::Create(CGM.getContext(), "in_bounds", Fn);
 
         size_t array_size = llvm::cast<ArrayType>(EX.getBase()->getType())->getInitSize();
         llvm::Value* condition = Builder.CreateICmpUGE(index, Builder.getInt64(array_size));
