@@ -46,7 +46,7 @@ public:
 
     bool isPlace() const;
 
-    bool isModifiableValue() const;
+    bool isMutablePlace() const;
 
     bool isLiteralExpr() const;
 };

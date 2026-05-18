@@ -3,6 +3,8 @@
 #include "include/AST/Decl.hpp"
 #include "include/AST/DeclBase.hpp"
 
+#include "src/Debug.hpp"
+
 namespace c {
 namespace ast {
 
@@ -60,19 +62,17 @@ bool Expr::isPlace() const {
     }
 }
 
-bool Expr::isModifiableValue() const {
+bool Expr::isMutablePlace() const {
     if (!isPlace())
         return false;
     if (llvm::isa<DeclRefExpr>(this)) {
         const Decl* DC = llvm::cast<DeclRefExpr>(this)->getDecl();
         if (auto VD = llvm::dyn_cast<VarDecl>(DC))
             return VD->isMutable();
-        if (auto PD = llvm::dyn_cast<ParamDecl>(DC))
+        else if (auto PD = llvm::dyn_cast<ParamDecl>(DC))
             return PD->isMutable();
-    } else if (llvm::isa<QualExpr>(this)) {
-        return llvm::cast<QualExpr>(this)->isModifiableValue();
-    }
-
+    } else if (auto qual = llvm::dyn_cast<QualExpr>(this))
+        return qual->getBase()->isMutablePlace();
     return true;
 }
 
