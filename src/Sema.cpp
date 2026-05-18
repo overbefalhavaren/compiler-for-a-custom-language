@@ -620,6 +620,11 @@ bool Sema::analyzeBinaryAssign(BinaryOperator* EX, Scope* scope) {
     if (analyzeExpr(EX->getRHS(), scope, true))
         return true;
 
+    if (!EX->getLHS()->isMutablePlace()) {
+        llvm::outs() << "Memory location is not assignable.\n";
+        return true;
+    }
+
     if (validateTypeCast(EX->getRHS()->getType(), EX->getLHS()->getType(), false)) {
         llvm::outs() << "Invalid type conversion in assignment expression.\n";
         return true;
@@ -688,6 +693,11 @@ bool Sema::analyzeUnaryAssign(UnaryOperator* EX, Scope* scope) {
     DEBUG("Called: analyzeUnarAssign");
     if (analyzeExpr(EX->getSubExpr(), scope, false))
         return true;
+
+    if (!EX->getSubExpr()->isMutablePlace()) {
+        llvm::outs() << "Memory location is not assignable.\n";
+        return true;
+    }
     
     EX->setType(EX->getSubExpr()->getType());
 
