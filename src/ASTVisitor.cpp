@@ -425,6 +425,7 @@ void ASTDumper::visitExpr(const ast::Expr& EX) {
         }
         case Stmt::ArrayLiteralKind: {
             auto AL = llvm::cast<ArrayLiteral>(EX);
+            Stream << AL.getAmntItems();
             indent();
             if (AL.isResolved()) {
                 newline(false);
@@ -480,8 +481,8 @@ void ASTDumper::visitExpr(const ast::Expr& EX) {
     }
 }
 
-void ASTDumper::visitType(const Type* Ty, bool unfoldPointer) {
-    Stream << "Type " << Ty << " ";
+void ASTDumper::visitType(const Type* Ty, bool unfoldNested) {
+    Stream << "Type " << Ty;
     if (Ty->isStructTy()) {
         Stream << llvm::cast<StructType>(Ty)->getDecl()->getName();
     } else if (Ty->isBuiltinTy()) {
@@ -498,19 +499,22 @@ void ASTDumper::visitType(const Type* Ty, bool unfoldPointer) {
         } else
             Stream << "&";
         
-        if (unfoldPointer) {
+        if (unfoldNested) {
             indent();
             newline(true);
-            visitType(Ty);
+            visitType(PT->getPointee());
             dedent();
         } else
             Stream << PT->getPointee();
     } else if (Ty->isArrayTy()) {
         auto AT = llvm::cast<ArrayType>(Ty);
-        Stream << "[" << AT->getElemType();
-        if (AT->getInitSize() != 0)
-            Stream << ": " << AT->getInitSize();
-        Stream << "]";
+        Stream << AT->getInitSize();
+        if (unfoldNested) {
+            indent();
+            newline(true);
+            visitType(AT->getElemType());
+            dedent();
+        }
     } else
         llvm_unreachable("Type::Kind missing condition");
 }
@@ -536,10 +540,11 @@ void ASTDumper::visitTypeInfo(const ast::TypeInfo& Ty) {
     }
     
     indent();
-    if (Ty.isResolved())
+    if (Ty.isResolved()) {
         visitType(Ty.getType(), false);
+    }
 
-    if (Ty.isPointerTy()) {
+    if (Ty.isPointerTy() || Ty.isArrayTy()) {
         newline(true);
         visitTypeInfo(*Ty.getPointee());
     }
