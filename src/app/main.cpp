@@ -2,16 +2,25 @@
 #include <memory>
 #include <type_traits>
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+// #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/TargetParser/Host.h"
+// #include "llvm/Target/TargetMachine.h"
 
 #include "include/AST/Decl.hpp"
 #include "include/AST/Parser.hpp"
+#include "include/CodeGen/CodeGenFunction.hpp"
 #include "include/CodeGen/CodeGenModule.hpp"
+#include "include/CodeGen/CodeGenTypes.hpp"
 #include "include/Frontend/ASTAllocator.hpp"
 #include "include/Frontend/ASTVisitor.hpp"
 #include "include/IO/Source.hpp"
@@ -24,109 +33,243 @@
 
 using namespace c;
 
-#define IS_TEST_BUILD
+#define IS_TEST_BUILD true
+#define DEBUG_DUMP_AST true
+#define DEBUG_EMIT_FAULTY_IR true
 
 llvm::StringRef EXEPath;
 
-int main(int argc, const char* argv[]) {
-    EXEPath = argv[0];
-    std::string main_source_file_path;
+struct Compiler {
+    SourceManager SrcManager;
+    Source* Src = nullptr;
 
-#ifndef IS_TEST_BUILD
-    if (argc == 1) {
-        llvm::outs() << "Must input a file path.\n";
-        return EINVAL;
-    }
+    llvm::StringRef CompilerPath = "";
+    llvm::SmallString<0> MainFilePath = llvm::SmallString<0>();
+    llvm::SmallString<0> OutputFilePath = llvm::SmallString<0>();
 
-    main_source_file_path = argv[1];
-    if (main_source_file_path == "--version") {
-        llvm::outs() << "Versions are not yet supported. This is an early test build.\n Version: 0.0.0\n";
-        return 0;
-    }
+    ASTAllocator Alloc = ASTAllocator();
+    ast::ModuleDecl* TopModule = nullptr;
+    ASTDumper* Dumper = nullptr;
+    Lexer* Lex = nullptr;
+    Parser* Parse = nullptr;
+    Sema* SemaAnalasys = nullptr;
+    
+    llvm::LLVMContext Context = llvm::LLVMContext();
+    std::unique_ptr<llvm::Module> Mod = nullptr;
+
+    codegen::CodeGenModule* CGModule = nullptr;
+};
+
+bool handleCommandLineArguments(Compiler& instance, llvm::ArrayRef<llvm::StringRef> args) {
+    DEBUG("cl 1");
+    instance.CompilerPath = args[0];
+    DEBUG("cl 2");
+
+#if IS_TEST_BUILD
+    instance.MainFilePath = "C:/Users/LUOST001/Documents/GitHub/gymnasiearbete-2526-LucasISkolan/CompileMe.txt";
 #else
-    main_source_file_path = "C:/Users/LUOST001/Documents/GitHub/gymnasiearbete-2526-LucasISkolan/CompileMe.txt";
-#endif
-
-    DEBUG("STEP 1");
-
-    if (!SourceManager::normalize(main_source_file_path)) {
-        llvm::outs() << "Invalid File path.\n";
-        return ENOENT;
+    if (args.size() == 1) {
+        llvm::outs() << "No input file.\n";
+        return true;
     }
 
-    DEBUG("STEP 2");
-
-    Source* src;
-    SourceManager source_manager(llvm::vfs::getRealFileSystem());
-    if (auto file_or_err = source_manager.getSource(main_source_file_path)) {
-        src = &file_or_err.get();
+    if (args[1] == "--version") {
+        llvm::outs() << "No versions yet!\n";
+        std::exit(0);
     } else {
-        llvm::outs() << "File not found: " << main_source_file_path << ".\n";
-        return ENOENT;
+        instance.MainFilePath = args[0];
+        if (SourceManager::normalize(instance.MainFilePath)) {
+            llvm::outs() << "File not found: '" << args[0] << "'.\n";
+            return true;
+        }
+    }
+#endif // IS_TEST_BUILD
+    DEBUG("cl 3");
+    if (args.size() <= 2) {
+        DEBUG("cl 3.1.1");
+        instance.OutputFilePath = instance.MainFilePath;
+        DEBUG("cl 3.1.2");
+        llvm::sys::path::replace_extension(instance.OutputFilePath, ".ll");
+        DEBUG("cl 3.1.3");
+    } else {
+        // TODO: Add checks to chek if the files exists and can be written to
+        DEBUG("cl 3.2.1");
+        instance.OutputFilePath = args[1];
+    }
+    
+    DEBUG("cl 4");
+    return false;
+}
+
+bool initTarget(Compiler& instance) {
+    // llvm::InitializeNativeTarget();
+    // llvm::InitializeNativeTargetAsmPrinter();
+    // llvm::InitializeNativeTargetAsmParser();
+    // llvm::InitializeAllTargetInfos();
+    // llvm::InitializeAllTargets();
+    // llvm::InitializeAllTargetMCs();
+    // llvm::InitializeAllAsmPrinters();
+    // llvm::InitializeAllAsmParsers();
+
+    DEBUG("target 1");
+    instance.Mod = std::make_unique<llvm::Module>(
+        instance.Src->getFilename(),
+        instance.Context
+    );
+    DEBUG("target 2");
+    llvm::Triple triple(llvm::sys::getDefaultTargetTriple());
+    DEBUG("target 3");
+    instance.Mod->setTargetTriple(triple);
+    DEBUG("target 4");
+
+    // FIXME: My version of llvm is apparently with Visual Studio 2019
+    // But I only have Visual Studio 2022, and MicroSLOP want's me
+    // to log in to download Visual Studio 2019 (bullshit i know)
+    // which I can't so let's just hardcode DataLayout instead.
+    // NOTE: This version will probably only work for x86_64 MSVC Win64
+
+    // std::string err;
+    // auto target = llvm::TargetRegistry::lookupTarget(triple, err);
+    // if (!target) {
+    //     DEBUG("target 12.5");
+    //     llvm::outs() << err;
+    //     return true;
+    // }
+
+    // auto TM = target->createTargetMachine(
+    //     triple,
+    //     "generic",
+    //     "",
+    //     llvm::TargetOptions(),
+    //     std::nullopt
+    // );
+
+    // instance.Mod->setDataLayout(TM->createDataLayout());
+
+    // FIXME: Hardcode DataLayout
+    instance.Mod->setDataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
+    DEBUG("target 5");
+    return false;
+}
+
+bool emit(Compiler& instance) {
+    DEBUG("emit 1");
+    if (instance.Parse->parse(*instance.TopModule)) {
+        llvm::outs() << "Parser error\n";
+        return true;
+    }
+    
+#if DEBUG_DUMP_AST
+    DEBUG("emit 1.5");
+    instance.Dumper->dump(instance.TopModule);
+#endif // DEBUG_DUMP_AST
+
+    DEBUG("emit 2");
+    if (instance.SemaAnalasys->analyze(instance.TopModule)) {
+        llvm::outs() << "Semantic analasys error\n";
+        return true;
     }
 
-    DEBUG("STEP 3");
-
-    ast::ModuleDecl global_module(src->getBufferSpan(), src->getFilename());
-
-    ASTAllocator ast_allocator;
-    ast_allocator.createBuiltinTypes();
-
-    DEBUG("STEP 4");
-
-    Lexer lexer(src->getFileID(), src->getBufferData());
-    Parser parser(ast_allocator, lexer);
-
-    DEBUG("STEP 5");
-
-    if (parser.parse(global_module)) {
-        llvm::outs() << "Parser Error\n";
-        return 1;
+    DEBUG("emit 3");
+    instance.CGModule->emitModule(*instance.TopModule);
+#if !DEBUG_EMIT_FAULTY_IR
+    if (llvm::verifyModule(*instance.Mod, &llvm::outs())) {
+        llvm::outs() << "IR verification error\n";
+        return true;
     }
+#endif // DEBUG_EMIT_FAULTY_IR
 
-    DEBUG("STEP 6");
-
-    FormatFlags fmt(4);
-    ASTDumper dumper(fmt, llvm::outs());
-
-    dumper.dump(&global_module);
-
-    Sema sema(ast_allocator);
-    if(sema.analyze(&global_module))
-        return 1;
-
-    DEBUG("STEP 7");
-
-    dumper.dump(&global_module);
-
-    llvm::LLVMContext ctx;
-    auto mod = std::make_unique<llvm::Module>(src->getFilename(), ctx);
-    codegen::CodeGenModule cgm(*mod, ctx);
-
-    DEBUG("STEP 8");
-
-    cgm.emitModule(global_module);
-
-    DEBUG("STEP 9");
-
-    llvm::verifyModule(*mod, &llvm::outs());
-
+    DEBUG("emit 3");
     std::error_code ec;
-    std::string out_file_path = main_source_file_path + ".ll";
-    llvm::raw_fd_ostream stream(out_file_path, ec, llvm::sys::fs::OF_None);
+    llvm::raw_fd_ostream stream(instance.OutputFilePath, ec, llvm::sys::fs::OF_Text);
 
+    DEBUG("emit 4");
     if (ec) {
         llvm::errs() << "Error opening file: " << ec.message() << "\n";
+        return true;
+    }
+
+    DEBUG("emit 5");
+    // instance.Mod->print(stream, nullptr, false, true);
+    instance.Mod->print(stream, nullptr);
+    DEBUG("emit 6");
+    stream.flush();
+
+    DEBUG("emit 7");
+    return false;
+}
+
+int main(int argc, const char* argv[]) { 
+    DEBUG("main 1");
+    llvm::SmallVector<llvm::StringRef> args(argc);
+    for (int i = 0; i < argc; i++)
+        args[i] = llvm::StringRef(argv[i]);
+
+    DEBUG("main 2");
+    auto source_manager = SourceManager(llvm::vfs::getRealFileSystem());
+    Compiler instance(
+        source_manager
+    );
+
+    DEBUG("main 3");
+    if (handleCommandLineArguments(instance, args)) {
+        llvm::outs() << "Error when handling command line arguments.\n";
+        return EINVAL;
+    }
+    DEBUG("main 4");
+
+    auto file_or_err = instance.SrcManager.getSource(instance.MainFilePath);
+    DEBUG("main 4.1");
+    // if (auto file_or_err = instance.SrcManager.getSource(instance.MainFilePath)) {
+    if (file_or_err) {
+        DEBUG("main 4.1.1");
+        instance.Src = &file_or_err.get();
+        DEBUG("main 4.1.2");
+    } else {
+        llvm::outs() << "File not found: '" << instance.MainFilePath << "'.\n";
+        return ENOENT;
+    }
+    DEBUG("main 5");
+    if (initTarget(instance)) {
+        llvm::outs() << "Error when initializing target.\n";
         return 1;
     }
 
-    DEBUG("STEP 10");
+    DEBUG("main 6");
+    instance.Alloc.createBuiltinTypes();
+    DEBUG("main 7");
+    instance.TopModule = instance.Alloc.Create<ast::ModuleDecl>(
+        instance.Src->getBufferSpan(), 
+        instance.Src->getFilename()
+    );
+    DEBUG("main 8");
+    instance.Dumper = new ASTDumper(
+        FormatFlags(),
+        llvm::outs()
+    );
+    DEBUG("main 9");
+    instance.Lex = new Lexer(
+        instance.Src->getFileID(), 
+        instance.Src->getBufferData()
+    );
+    DEBUG("main 10");
+    instance.Parse = new Parser(
+        instance.Alloc,
+        *instance.Lex
+    );
+    DEBUG("main 11");
+    instance.SemaAnalasys = new Sema(
+        instance.Alloc
+    );
+    DEBUG("main 12");
+    instance.CGModule = new codegen::CodeGenModule(
+        *instance.Mod,
+        instance.Context
+    );
 
-    mod->print(stream, nullptr, false, true);
-
-    DEBUG("STEP 11");
-
-    // FIXME: Call LLVM to compile the IR
+    DEBUG("main 13");
+    if (emit(instance))
+        return 1;
 
 #ifdef IS_TEST_BUILD
     llvm::outs() << "Congratulations! It didn't crash!\n";
