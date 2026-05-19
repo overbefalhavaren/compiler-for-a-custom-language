@@ -585,8 +585,8 @@ Place CodeGenFunction::emitSliceExpr(const SliceExpr& EX, bool doBoundsCheck) {
     DEBUG("Called: emitSliceExpr");
     llvm::Value* index = emitExpr(EX.getStart()).getValue();
     if (doBoundsCheck) {
-        auto trap_block = llvm::BasicBlock::Create(CGM.getContext(), "out_of_bounds", Fn);
         auto ok_block = llvm::BasicBlock::Create(CGM.getContext(), "in_bounds", Fn);
+        auto trap_block = llvm::BasicBlock::Create(CGM.getContext(), "out_of_bounds", Fn);
 
         size_t array_size = llvm::cast<ArrayType>(EX.getBase()->getType())->getInitSize();
         llvm::Value* condition = Builder.CreateICmpUGE(index, Builder.getInt64(array_size));
@@ -602,8 +602,8 @@ Place CodeGenFunction::emitSliceExpr(const SliceExpr& EX, bool doBoundsCheck) {
     }
 
     llvm::Value* result = Builder.CreateGEP(
-        CGM.getTypes().convertType(EX.getType()),
-        emitExpr(EX.getBase()).getValue(),
+        CGM.getTypes().convertType(EX.getBase()->getType()),
+        emitPlace(EX.getBase()).getPointer(),
         {Builder.getInt32(0), index}
     );
 
