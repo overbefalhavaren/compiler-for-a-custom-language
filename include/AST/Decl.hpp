@@ -1,8 +1,5 @@
 #pragma once
 
-#include <cassert>
-#include <type_traits>
-
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -20,7 +17,7 @@ class FieldDecl;
 
 class TypeAliasDecl : public TypeDecl {
 private:
-    TypeInfo* Info;
+    TypeInfo* Info = nullptr;
 public:
     static constexpr Kind ClassKind = TypeAliasDeclKind;
 
@@ -49,9 +46,9 @@ public:
         return DC->getKind() == ClassKind;
     }
     
-    void setFields(llvm::SmallVector<FieldDecl*>&& fields) {
+    void setFields(llvm::ArrayRef<FieldDecl*> fields) {
         // Added to the Container in the parser.
-        Fields = std::move(fields);
+        Fields.assign(fields.begin(), fields.end());
     }
 
     size_t getAmntFields() const {
@@ -64,10 +61,6 @@ public:
 
     const FieldDecl* getFieldDecl(size_t idx) const {
         return Fields[idx];
-    }
-
-    llvm::MutableArrayRef<FieldDecl*> fields() {
-        return llvm::MutableArrayRef<FieldDecl*>(Fields.begin(), Fields.end());
     }
 
     llvm::ArrayRef<FieldDecl*> fields() const {
@@ -124,7 +117,7 @@ class FieldDecl : public InitDecl {
 public:
     static constexpr Kind ClassKind = FieldDeclKind;
 private:
-    size_t Index;
+    size_t Index = 0;
     StructDecl* Parent = nullptr;
 public:
     FieldDecl(SrcSpan span, llvm::StringRef name, size_t idx, TypeInfo* info, Expr* init)
@@ -185,8 +178,8 @@ public:
         return !Parameters.empty();
     }
 
-    void setParams(llvm::SmallVector<ParamDecl*>&& params) {
-        Parameters = std::move(params);
+    void setParams(llvm::ArrayRef<ParamDecl*> params) {
+        Parameters.assign(params.begin(), params.end());
     }
     
     size_t getAmntParams() const {
@@ -203,10 +196,6 @@ public:
 
     llvm::ArrayRef<ParamDecl*> parameters() const {
         return Parameters;
-    }
-
-    llvm::MutableArrayRef<ParamDecl*> parameters() {
-        return llvm::MutableArrayRef<ParamDecl*>(Parameters.begin(), Parameters.end());
     }
 };
 

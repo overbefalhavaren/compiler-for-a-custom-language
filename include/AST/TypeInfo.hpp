@@ -2,9 +2,7 @@
 
 #include <cassert>
 
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/ErrorHandling.h"
 
 #include "include/AST/Type.hpp"
 #include "include/IO/SrcSpan.hpp"
@@ -31,7 +29,7 @@ public:
     };
 private:
     Kind TypeKind;
-    SrcSpan Span;
+    SrcSpan Span = SrcSpan();
     const Type* Resolved = nullptr;
 
     union {

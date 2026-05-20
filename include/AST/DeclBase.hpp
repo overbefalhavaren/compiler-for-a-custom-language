@@ -1,19 +1,13 @@
 #pragma once
 
-#include <cassert>
-#include <optional>
-#include <type_traits>
-
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/Casting.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringRef.h"
 
 #include "include/AST/Type.hpp"
 #include "include/AST/TypeInfo.hpp"
 #include "include/IO/SrcSpan.hpp"
-
-#include "llvm/Support/raw_ostream.h"
 
 namespace c {
 namespace ast {
@@ -21,6 +15,7 @@ namespace ast {
 class StructDecl;   // include/AST/Decl.hpp
 class FunctionDecl; // include/AST/Decl.hpp
 class ModuleDecl;   // include/AST/Decl.hpp
+class Expr;         // include/AST/Expr.hpp
 class Container;
 
 class Decl {
@@ -57,7 +52,7 @@ public:
     };
 private:
     Kind DeclKind;
-    SrcSpan Span;
+    SrcSpan Span = SrcSpan();
     Container* DeclContainer = nullptr;
 protected:
     Decl(Kind DK, SrcSpan span)
@@ -104,7 +99,7 @@ public:
 
 class NamedDecl : public Decl {
 private:
-    llvm::StringRef Name;
+    llvm::StringRef Name = "";
 protected:
     NamedDecl(Kind DK, SrcSpan span, llvm::StringRef name)
         : Decl(DK, span), Name(name) {}
@@ -121,7 +116,7 @@ public:
 
 class TypeDecl : public NamedDecl {
 private:
-    const Type* Ty;
+    const Type* Ty = nullptr;
 protected:
     TypeDecl(Kind DK, SrcSpan span, llvm::StringRef name)
         : NamedDecl(DK, span, name), Ty(nullptr) {}
@@ -142,7 +137,7 @@ public:
 
 class ValueDecl : public NamedDecl {
 private:
-    TypeInfo* Info;
+    TypeInfo* Info = nullptr;
 protected:
     ValueDecl(Kind DK, SrcSpan span, llvm::StringRef name, TypeInfo* info)
         : NamedDecl(DK, span, name), Info(info) {}
@@ -172,7 +167,7 @@ public:
 
 class InitDecl : public ValueDecl {
 private:
-    Expr* Init;
+    Expr* Init = nullptr;
 protected:
     InitDecl(Kind DK, SrcSpan span, llvm::StringRef name, TypeInfo* info, Expr* init)
         : ValueDecl(DK, span, name, info), Init(init) {}
@@ -204,52 +199,28 @@ public:
     class LookupResult {
         friend class Container; // To access the lookup map of Container
     private:
-        llvm::StringRef Name;
-        Container* LookupContainer;
+        Container& LookupContainer;
+        llvm::StringRef Name = "";
 
         bool HasCachedLookup = false;
         llvm::ArrayRef<NamedDecl*> Lookup = {};
 
-        llvm::ArrayRef<NamedDecl*>& getLookup() {
-            if (HasCachedLookup)
-                return Lookup;
-
-            auto name_lookup = LookupContainer->LookupMap.find(Name);
-            if (name_lookup == LookupContainer->LookupMap.end())
-                return Lookup; // Null value, since just doing "{}" gives a compiler error
-
-            HasCachedLookup = true;
-            Lookup = name_lookup->second;
-            return Lookup;
-        }
+        llvm::ArrayRef<NamedDecl*>& getLookup();
     public:
-        LookupResult(Container* lookup, llvm::StringRef name)
+        LookupResult(Container& lookup, llvm::StringRef name)
             : LookupContainer(lookup), Name(name) {}
 
         template <typename T>
-        T* get() {
-            static_assert(std::is_base_of_v<Decl, T> && "T must be subclass of Decl.");
-            static_assert(std::is_base_of_v<NamedDecl, T> && "T must be a subclass of NamedDecl.");
-            
-            for (NamedDecl* DC : getLookup())
-                if (isa<T>(DC))
-                    return llvm::cast<T>(DC);
-            return nullptr;
-        }
+        T* get();
 
-        NamedDecl* getKind(Decl::Kind kind) {
-            for (NamedDecl* DC : getLookup())
-                if (DC->getKind() == kind)
-                    return DC;
-            return nullptr;
-        }
+        NamedDecl* getKind(Decl::Kind kind);
 
         llvm::ArrayRef<NamedDecl*> decls() {
             return getLookup();
         }
     };
 private:
-    Decl* This;
+    Decl* This = nullptr;
     Container* Parent = nullptr;
 
     llvm::SmallVector<Decl*> DeclArray = {};
@@ -288,46 +259,32 @@ public:
         if (!LookupMapIsConstructed())
             constructLookupMap();
 
-        return LookupResult(this, name);
+        return LookupResult(*this, name);
     }
 
     llvm::ArrayRef<Decl*> decls() const {
         return DeclArray;
     }
 
-    llvm::MutableArrayRef<Decl*> decls() {
-        return DeclArray;
+    bool isStructDecl() const {
+        return llvm::isa<StructDecl>(This);
     }
 
-    // bool isStructDecl() const {
-    //     return llvm::isa<StructDecl>(This);
-    // }
+    bool isFunctionDecl() const {
+        return llvm::isa<FunctionDecl>(This);
+    }
 
-    // bool isFunctionDecl() const {
-    //     return llvm::isa<FunctionDecl>(This);
-    // }
-
-    // bool isModuleDecl() const {
-    //     return llvm::isa<ModuleDecl>(This);
-    // }
+    bool isModuleDecl() const {
+        return llvm::isa<ModuleDecl>(This);
+    }
 private:
     bool LookupMapIsConstructed() const {
         return !LookupMap.empty();
     }
 
-    void constructLookupMap() {
-        for (Decl* DC : decls()) 
-            if (llvm::isa<NamedDecl>(DC))
-                pushDeclToLookupMap(llvm::cast<NamedDecl>(DC));
-    }
+    void constructLookupMap();
 
-    void pushDeclToLookupMap(NamedDecl* DC) {
-        auto result = LookupMap.find(DC->getName());
-        if (result != LookupMap.end()) 
-            (void)result->second.push_back(DC);
-
-        (void)LookupMap.insert({DC->getName(), {DC}});
-    }
+    void pushDeclToLookupMap(NamedDecl* DC);
 };
 
 } // namespace ast

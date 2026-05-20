@@ -1,7 +1,5 @@
 #pragma once
 
-#include <type_traits>
-
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -19,13 +17,13 @@ private:
     llvm::LLVMContext& Context;
     llvm::Module& Module;
 
-    CodeGenTypes Types;
+    CodeGenTypes Types = CodeGenTypes(*this);
 
     llvm::DenseMap<ast::VarDecl*, llvm::GlobalVariable*> Globals;
     llvm::DenseMap<ast::FunctionDecl*, llvm::Function*> Functions;
 public:
     CodeGenModule(llvm::Module& module, llvm::LLVMContext& ctx) 
-        : Module(module), Context(ctx), Types(*this) {}
+        : Module(module), Context(ctx) {}
     ~CodeGenModule() = default;
 
     llvm::LLVMContext& getContext() {

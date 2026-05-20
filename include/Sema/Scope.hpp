@@ -6,9 +6,6 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "include/AST/DeclBase.hpp"
-#include "include/AST/Decl.hpp"
-
-#include "llvm/Support/raw_ostream.h"
 
 namespace c {
 namespace sema {
@@ -81,13 +78,7 @@ public:
         return !ScopeDecls.empty();
     }
 
-    llvm::ArrayRef<ast::NamedDecl*> decls() {
-        // FIXME: Causes segfault, also a terrible solution
-        // if (ScopeDecls.empty() && Entity != nullptr)
-        //     for (ast::Decl* DC : Entity->decls())
-        //         if (ast::NamedDecl* ND = llvm::dyn_cast<ast::NamedDecl>(DC))
-        //             ScopeDecls.push_back(ND);
-
+    llvm::ArrayRef<ast::NamedDecl*> decls() const {
         return ScopeDecls;
     }
 

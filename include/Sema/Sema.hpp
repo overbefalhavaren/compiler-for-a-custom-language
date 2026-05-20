@@ -4,12 +4,12 @@
 #include "llvm/ADT/StringRef.h"
 
 #include "include/AST/Decl.hpp"
+#include "include/AST/DeclBase.hpp"
 #include "include/AST/Expr.hpp"
 #include "include/AST/Stmt.hpp"
 #include "include/AST/Type.hpp"
 #include "include/AST/TypeInfo.hpp"
 #include "include/Frontend/ASTAllocator.hpp"
-#include "include/Lexer/utils.hpp"
 #include "include/Sema/Lookup.hpp"
 #include "include/Sema/Scope.hpp"
 

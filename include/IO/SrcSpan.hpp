@@ -10,7 +10,7 @@ namespace c {
 class [[nodiscard]] FileID {
     friend class SourceManager;
 private:
-    uint8_t ID;
+    uint8_t ID = 0;
 
     FileID(uint8_t id) : ID(id) {}
 public:
@@ -52,8 +52,8 @@ private:
     // TODO: 
     // Can optimize this by splitting a uint32 into uint24 (offset) and uint8 (file_id). 
     // The max value of uint24 is 16 777 215 which is more than enough for an offset.
-    uint32_t Offset;
-    FileID ID;
+    uint32_t Offset = 0;
+    FileID ID = FileID();
 public:
     SrcLoc() = default;
     SrcLoc(FileID id, uint32_t offset) 
@@ -93,23 +93,22 @@ private:
     // TODO: 
     // can be optimized in the same way a Location but using a uint56 instead.
     // (uint24) start, (uint24) end, (uint8) id
-    uint32_t Start;
-    uint32_t End;
-    FileID ID;
+    uint32_t Start = 0;
+    uint32_t End = 0;
+    FileID ID = FileID();
 
 public:
-    SrcSpan(const FileID& id, uint32_t start, uint32_t end) 
-        : ID(id), Start(start), End(end) {
-        assert(ID.isValid() && "Can't make a span from an invalid FileID.");
-        assert(Start <= End && "The start of a span can't be larger than the end.");
-    }
-// public:
     SrcSpan() = default;
     SrcSpan(const SrcLoc& loc)
         : SrcSpan(loc.getID(), loc.getOffset(), loc.getOffset()) {}
     SrcSpan(const SrcLoc& start, const SrcLoc& end)
         : SrcSpan(start.getID(), start.getOffset(), end.getOffset()) {
         assert(start.getID() == end.getID() && "Can't make a span from locations in different files.");
+    }
+    SrcSpan(const FileID& id, uint32_t start, uint32_t end) 
+        : ID(id), Start(start), End(end) {
+        assert(ID.isValid() && "Can't make a span from an invalid FileID.");
+        assert(Start <= End && "The start of a span can't be larger than the end.");
     }
     ~SrcSpan() = default;
 

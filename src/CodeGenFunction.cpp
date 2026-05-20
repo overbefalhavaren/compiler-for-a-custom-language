@@ -1,5 +1,6 @@
 #include "include/CodeGen/CodeGenFunction.hpp"
 
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #include "include/Frontend/ASTVisitor.hpp"

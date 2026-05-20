@@ -9,8 +9,8 @@ namespace codegen {
 
 class Place {
 private:
-    llvm::Value* Ptr;
-    const Type* Ty;
+    llvm::Value* Ptr = nullptr;
+    const Type* Ty = nullptr;
 public:
     Place(llvm::Value* Ptr, const Type* Ty)
         : Ptr(Ptr), Ty(Ty) {}
@@ -27,7 +27,7 @@ public:
 
 class Value {
 private:
-    llvm::Value* Val;
+    llvm::Value* Val = nullptr;
 public:
     Value(llvm::Value* Val)
         : Val(Val) {}

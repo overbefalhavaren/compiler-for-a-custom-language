@@ -1,9 +1,5 @@
 #pragma once
 
-#include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/APInt.h"
-#include "llvm/ADT/StringRef.h"
-
 #include "include/Frontend/ASTAllocator.hpp"
 #include "include/Lexer/Lexer.hpp"
 #include "include/Lexer/Token.hpp"
@@ -17,8 +13,8 @@ class ModuleDecl; // include/AST/Decl.hpp
 class Parser {
 private:
     Lexer& LexerSource;
-    Token CurrentToken;
     ASTAllocator& Alloc;
+    Token CurrentToken = Token();
 public:
     Parser(ASTAllocator& alloc, Lexer& lexer)
         : LexerSource(lexer), Alloc(alloc) {
@@ -38,14 +34,7 @@ public:
         return CurrentToken;
     }
 
-    const Token& nextToken() {
-        CurrentToken = LexerSource.next();
-        llvm::outs() << "Next Token: " << strTokenType(CurrentToken.getType());
-        if (CurrentToken.is(TokenType::Identifier) || CurrentToken.isLiteral())
-            llvm::outs() << ": '" << CurrentToken.getData() << "'";
-        llvm::outs() << "\n";
-        return CurrentToken;
-    }
+    const Token& nextToken();
 
     bool parse(ast::ModuleDecl& result);
 };

@@ -64,7 +64,7 @@ public:
     };
 private:
     Kind StmtKind;
-    SrcSpan Span;
+    SrcSpan Span = SrcSpan();
 protected:
     Stmt(Kind SK, SrcSpan span)
         : StmtKind(SK), Span(span) {}
@@ -98,7 +98,7 @@ public:
 
 class StmtWithBody : public Stmt {
 private:
-    Stmt* Body;
+    Stmt* Body = nullptr;
 protected:
     StmtWithBody(Kind SK, SrcSpan span, Stmt* body)
         : Stmt(SK, span), Body(body) {}
@@ -119,7 +119,7 @@ public:
 
 class ConditionalStmt : public StmtWithBody {
 private:
-    Expr* Condition;
+    Expr* Condition = nullptr;
 protected:
     ConditionalStmt(Kind SK, SrcSpan span, Expr* cond, Stmt* body)
         : StmtWithBody(SK, span, body), Condition(cond) {}
@@ -142,7 +142,7 @@ class IfStmt : public ConditionalStmt {
 public:
     static constexpr Kind ClassKind = IfStmtKind;
 private:
-    Stmt* Else;
+    Stmt* Else = nullptr;
 public:
     IfStmt(SrcSpan span, Expr* cond, Stmt* body, Stmt* else_)
         : ConditionalStmt(ClassKind, span, cond, body), Else(else_) {}
@@ -180,7 +180,7 @@ class BlockStmt : public Stmt {
 public:
     static constexpr Kind ClassKind = BlockStmtKind;
 private:
-    llvm::SmallVector<Stmt*> Stmts;
+    llvm::SmallVector<Stmt*> Stmts = {};
 public:
     BlockStmt(SrcSpan span, llvm::SmallVector<Stmt*> stmts = {})
         : Stmt(ClassKind, span), Stmts(stmts) {}
@@ -210,7 +210,7 @@ class ReturnStmt : public Stmt {
 public:
     static constexpr Kind ClassKind = ReturnStmtKind;
 private:
-    Expr* Value;
+    Expr* Value = nullptr;
 public:
     ReturnStmt(SrcSpan span, Expr* value)
         : Stmt(ClassKind, span), Value(value) {}
@@ -240,7 +240,7 @@ class DeclStmt : public Stmt {
 public:
     static constexpr Kind ClassKind = DeclStmtKind;
 private:
-    NamedDecl* DC;
+    NamedDecl* DC = nullptr;
 public:
     DeclStmt(NamedDecl* DC)
         : Stmt(ClassKind, DC->getSpan()), DC(DC) {}

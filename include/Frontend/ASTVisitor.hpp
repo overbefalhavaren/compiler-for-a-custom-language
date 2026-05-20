@@ -1,7 +1,5 @@
 #pragma once
 
-#if true
-
 #include <optional>
 
 #include "llvm/ADT/StringRef.h"
@@ -21,9 +19,9 @@ struct FormatFlags {
 
 class ASTVisitor {
 protected:
-    size_t IndentLevel = 0;
-    FormatFlags Flags;
     llvm::raw_ostream& Stream;
+    size_t IndentLevel = 0;
+    FormatFlags Flags = FormatFlags();
 
     ASTVisitor(FormatFlags flags, llvm::raw_ostream& stream)
         : Flags(flags), Stream(stream) {}
@@ -137,5 +135,3 @@ public:
 // class ASTJSONDumper : public ASTFormatter;
 
 } // namespace c
-
-#endif

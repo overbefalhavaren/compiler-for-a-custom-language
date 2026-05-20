@@ -1,10 +1,6 @@
 #pragma once
 
-#include <optional>
-#include <type_traits>
-
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
@@ -12,7 +8,6 @@
 #include "include/AST/Decl.hpp"
 #include "include/AST/Expr.hpp"
 #include "include/AST/Stmt.hpp"
-#include "include/AST/Type.hpp"
 #include "include/CodeGen/CodeGenModule.hpp"
 #include "include/CodeGen/Value.hpp"
 
@@ -22,14 +17,13 @@ namespace codegen {
 class CodeGenFunction {
 private:
     CodeGenModule& CGM;
-    
-    llvm::Function* Fn;
-    llvm::IRBuilder<> Builder;
+    llvm::IRBuilder<> Builder = llvm::IRBuilder<>(CGM.getContext());
 
+    llvm::Function* Fn = nullptr;
     llvm::DenseMap<const ast::InitDecl*, Place> Locals;
 public:
     CodeGenFunction(CodeGenModule& cgm, llvm::Function* fn) 
-        : CGM(cgm), Fn(fn), Builder(cgm.getContext()) {}
+        : CGM(cgm), Builder(cgm.getContext()), Fn(fn) {}
     
     llvm::IRBuilder<>& getBuilder() {
         return Builder;

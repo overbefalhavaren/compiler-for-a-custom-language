@@ -133,8 +133,8 @@ class PointerType : public Type {
 public:
     static constexpr Kind ClassKind = PointerTypeKind;
 private:
-    bool IsRawPtr;
-    const Type* Pointee;
+    bool IsRawPtr = false;
+    const Type* Pointee = nullptr;
 public:
     PointerType(bool isRawPtr, const Type* pointee)
         : Type(ClassKind), IsRawPtr(isRawPtr), Pointee(pointee) {}
@@ -160,8 +160,8 @@ class ArrayType : public Type {
 public:
     static constexpr Kind ClassKind = ArrayTypeKind;
 private:
-    const Type* ElemType;
-    size_t InitSize;
+    const Type* ElemType = nullptr;
+    size_t InitSize = 0;
 public:
     ArrayType(const Type* ET, size_t size)
         : Type(ClassKind), ElemType(ET), InitSize(size) {}

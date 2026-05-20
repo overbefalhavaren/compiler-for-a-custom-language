@@ -1,8 +1,9 @@
 #pragma once
 
+#include <cassert>
 #include <type_traits>
 
-#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Allocator.h"
 
 #include "include/AST/Type.hpp"

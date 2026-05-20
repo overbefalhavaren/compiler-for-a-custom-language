@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/SmallString.h"
@@ -26,49 +25,13 @@ public:
         : FS(fs) {}
     ~SourceManager() = default;
 
-    static bool normalize(std::string& path) {
-        llvm::SmallString<0> full_path(path);
-        if (llvm::sys::fs::make_absolute(full_path))
-            return true;
-        
-        if (llvm::sys::path::remove_dots(full_path))
-            return true;
+    static bool normalize(llvm::SmallString<0>& path);
 
-        path = full_path.str();
-        return false;
-    }
+    Source* getSourceFromID(FileID id);
 
-    Source* getSourceFromID(FileID id) {
-        if (!id.isValid())
-            return nullptr;
-
-        assert(SourceCache.size() >= FileIDToIndex(id) && "Invalid FileID for SourceManager.\n");
-        return SourceCache[FileIDToIndex(id)];
-    }
-
-    llvm::ErrorOr<Source&> getSource(llvm::StringRef path) {
-        auto id_lookup = IDCache.find(path);
-        if (id_lookup != IDCache.end())
-            return *SourceCache[FileIDToIndex(id_lookup->second)];
-
-        auto file_or_err = FS->openFileForRead(path);
-        file_or_err.get();
-        if (!file_or_err)
-            return file_or_err.getError();
-
-        auto buff_or_err = file_or_err.get()->getBuffer(path);
-        if (!buff_or_err)
-            return buff_or_err.getError();
-
-        return cacheBuffer(std::move(buff_or_err.get()), path);
-    }
-private:
-    Source& cacheBuffer(std::unique_ptr<llvm::MemoryBuffer>&& buffer, llvm::StringRef path) {
-        FileID id(SourceCache.size() + 1);
-        SourceCache.push_back(new Source(*this, id, std::move(buffer))); // FIXME: I don't like "new"
-        IDCache.insert({path, id});
-        return *SourceCache.back();
-    }
+    llvm::ErrorOr<Source&> getSource(llvm::StringRef path);
+protected:
+    Source& cacheBuffer(std::unique_ptr<llvm::MemoryBuffer>&& buffer, llvm::StringRef path);
 
     static size_t FileIDToIndex(FileID ID) {
         return ID.id() - 1;

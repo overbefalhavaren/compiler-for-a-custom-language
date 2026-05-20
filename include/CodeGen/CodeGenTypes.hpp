@@ -1,14 +1,9 @@
 #pragma once
 
-#include <type_traits>
-
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/Support/Casting.h"
 
-#include "include/AST/Decl.hpp"
 #include "include/AST/Type.hpp"
 
 namespace c {

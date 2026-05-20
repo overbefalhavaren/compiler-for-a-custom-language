@@ -1,9 +1,15 @@
+#include "include/Sema/Lookup.hpp"
 #include "include/Sema/Sema.hpp"
+
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
+
+#include "include/Lexer/utils.hpp"
+
+#include "src/Debug.hpp"
 
 using namespace c::ast;
 using namespace c::sema;
-
-#include "src/Debug.hpp"
 
 void printScopeStackDecls(Scope* scope) {
     llvm::outs() << "Scope: ";
@@ -27,6 +33,113 @@ void printScopeStackDecls(Scope* scope) {
 }
 
 namespace c {
+
+namespace sema {
+
+template <typename T>
+T* LookupResult::getAsSingle() const {
+    // Check T is a valid subclass of NamedDecl.
+    static_assert(std::is_base_of_v<ast::Decl, T> && "T must be subclass of Decl.");
+    static_assert(std::is_base_of_v<ast::NamedDecl, T> && "T must be a subclass of NamedDecl.");
+
+    for (ast::NamedDecl* DC : Decls)
+        if (llvm::isa<T>(DC))
+            return llvm::cast<T>(DC);
+    return nullptr;
+}
+
+LookupResult Lookup::findKind(ast::Decl::Kind kind) const {
+    Scope* current = LookupScope;
+    while (true) {
+        for (ast::NamedDecl* DC : current->decls())
+            if (DC->getKind() == kind && DC->getName() == Name)
+                return LookupResult(DC);
+
+        if (!current->hasParent())
+            return LookupResult();
+        if (current->isFunctionPrototypeScope() && LocalOnly)
+            return LookupResult();
+        current = current->getParent();
+    }
+}
+
+LookupResult Lookup::doLookup(bool isSingle) const {
+    LookupResult result;
+
+    LookupFilter is_lookup_kind = getLookupFilter();
+    Scope* current = getStartScope();
+
+    while (true) {
+        for (ast::NamedDecl* DC : current->decls()) {
+            if (is_lookup_kind(DC) && DC->getName() == Name) {
+                if (isSingle)
+                    return LookupResult(DC);
+
+                result.pushDecl(DC);
+            }
+        }
+
+        if (!current->hasParent())
+            break;
+        if (current->isFunctionPrototypeScope() && LocalOnly)
+            break;
+
+        current = current->getParent();
+    }
+
+    return result;
+}
+
+Scope* Lookup::getStartScope() const {
+    switch (Kind) {
+        default:
+            llvm_unreachable("LookupKind flag is missing a case.");
+        case Any:
+        case Value:
+            return LookupScope;
+        case Type:
+            if (LookupScope->isFunctionScope())
+                // TODO: Remove the note when templates are implemented.
+                // NOTE: Functions currently can't have templates. 
+                // Get  the prototype of the function instead of the functions 
+                // parent scope because the function can have a template. 
+                return LookupScope->getFnPrototype();
+            return LookupScope;
+    }
+}
+
+// This language is too stupid to understand you can just use llvm::isa.
+// So here I am implementing my own wrapper function around llvm::isa... 
+// I love my life...
+template <typename T>
+bool isaWrapper(ast::Decl* DC) {
+    return llvm::isa<T>(DC);
+}
+
+Lookup::LookupFilter Lookup::getLookupFilter() const {
+    switch (Kind) {
+        default:
+            // If you reach this point then congratulations, you are officially stupid.
+            llvm_unreachable("LookupKind flag is missing a case.");
+
+        case Any:
+            // Lambda function are stupid but let's use them anyway!
+            return [](ast::Decl* DC) {
+                return true;
+            };
+        case Value:
+            // Captures VarDecl, ParamDecl, FieldDecl and FunctionDecl.
+            // Because function pointers are fun... (that's what *she* said)
+            return &isaWrapper<ast::ValueDecl>;
+        case Type:
+            // TODO: Update this when more TypeDecl subclasses are added
+            // Captures TypeAliasDecl and StructDecl
+            // Because type are just... built different... or somthing...
+            return &isaWrapper<ast::TypeDecl>;
+    }
+}
+
+} // namespace sema
 
 bool Sema::analyze(ast::ModuleDecl* topModule) {
     return analyzeModuleDecl(topModule, nullptr);
@@ -336,7 +449,7 @@ bool Sema::analyzeInitDecl(InitDecl* DC, Scope* scope, bool isVarDecl) {
             return true;
         }
 
-        // FIXME: Maybe check for void function call
+        // FIXME: Maybe check if the init is a CallExpr and validate that it isn't void
         
         DC->getTypeInfo()->setType(DC->getInit()->getType());
         return false;
@@ -344,7 +457,7 @@ bool Sema::analyzeInitDecl(InitDecl* DC, Scope* scope, bool isVarDecl) {
         return true;
 
     if (DC->getInit()->isTypeDependant()) {
-        // FIXME: 
+        // FIXME: Implement
         llvm_unreachable("Currently no type dependant expressions (i think).");
     } else if (validateTypeCast(DC->getInit()->getType(), DC->getType(), false)) {
         llvm::outs() << "Invalid type conversion\n";

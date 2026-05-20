@@ -235,7 +235,7 @@ public:
         SrcSpan span(start, P.peekToken().getEndLoc());
 
         (void)P.nextToken();
-        return Alloc.Create<ArrayLiteral>(span, std::move(items));
+        return Alloc.Create<ArrayLiteral>(span, items);
     }
 
     IntegerLiteral* parseIntegerLiteral() {
@@ -328,7 +328,7 @@ public:
                     (void)P.nextToken();
             }
 
-        result->setArguments(std::move(args));
+        result->setArguments(args);
         result->setSpan(SrcSpan(start, P.peekToken().getEndLoc()));
 
         (void)P.nextToken();
@@ -649,8 +649,8 @@ public:
             result->pushDecl(next);
         }
 
-        result->setFields(std::move(fields));
-        result->setSpan(SrcSpan(std::move(start), P.peekToken().getEndLoc()));
+        result->setFields(fields);
+        result->setSpan(SrcSpan(start, P.peekToken().getEndLoc()));
 
         (void)P.nextToken();
         return result;
@@ -698,7 +698,7 @@ public:
         // in case the function doesn't have a return type.
         SrcLoc end = P.peekToken().getEndLoc();
 
-        result->setParams(std::move(parameters));
+        result->setParams(parameters);
         if (P.nextToken().is(TokenType::Arrow)) {
             (void)P.nextToken();
             TypeInfo* type = parseTypeRef();
@@ -708,7 +708,7 @@ public:
             result->setTypeInfo(type);
         }
 
-        result->setSpan(SrcSpan(std::move(start), std::move(end)));
+        result->setSpan(SrcSpan(start, end));
 
         if (P.peekToken().is(TokenType::Colon)) {
             BlockStmt* body = parseBlockStmt();
@@ -733,7 +733,7 @@ public:
             if (P.peekToken().is(TokenType::Elif) || 
                 P.peekToken().is(TokenType::Else)) {
                 SrcSpan span(start, P.peekToken().getEndLoc());
-                return Alloc.Create<BlockStmt>(span, std::move(stmts));
+                return Alloc.Create<BlockStmt>(span, stmts);
             }
 
             if (P.peekToken().is(TokenType::Eof)) {
@@ -750,7 +750,7 @@ public:
         SrcSpan span(start, P.peekToken().getEndLoc());
 
         (void)P.nextToken();
-        return Alloc.Create<BlockStmt>(span, std::move(stmts));
+        return Alloc.Create<BlockStmt>(span, stmts);
     }
 
     Stmt* parseStmtBody() {
@@ -823,6 +823,14 @@ public:
 
 namespace c {
 
+const Token& Parser::nextToken() {
+    CurrentToken = LexerSource.next();
+    DEBUG(std::string("Called: nextToken:")
+          + " Kind: " + strTokenType(CurrentToken.getType()).str() 
+          + " Data: " + CurrentToken.getData().str());
+    return CurrentToken;
+}
+
 bool Parser::parse(ModuleDecl& result) {
     DEBUG("Called: parse");
     if (peekToken().is(TokenType::Eof))
@@ -832,12 +840,10 @@ bool Parser::parse(ModuleDecl& result) {
     RecurseiveDescentParser recurse(*this, pratt, Alloc);
 
     do {
-        DEBUG("Loop start");
         ast::Decl* next = recurse.parseDecl();
         if (!next) return true;
 
         result.pushDecl(next);
-        DEBUG("Loop end");
     } while (!peekToken().is(TokenType::Eof));
     return false;
 }

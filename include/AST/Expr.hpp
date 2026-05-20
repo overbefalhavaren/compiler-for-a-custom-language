@@ -7,8 +7,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/ErrorHandling.h"
 
 #include "include/AST/Stmt.hpp"
 #include "include/AST/Type.hpp"
@@ -16,6 +14,7 @@
 namespace c {
 namespace ast {
 
+class NamedDecl; // include/AST/DeclBase.hpp
 class FieldDecl; // include/AST/Decl.hpp
 
 class Expr : public Stmt {
@@ -53,7 +52,7 @@ public:
 
 class QualExpr : public Expr {
 private:
-    Expr* Base;
+    Expr* Base = nullptr;
 protected:
     QualExpr(Kind SK, SrcSpan span, Expr* base)
         : Expr(SK, span), Base(base) {}
@@ -76,7 +75,7 @@ class AccessExpr : public QualExpr {
 public:
     static constexpr Kind ClassKind = AccessExprKind;
 private:
-    llvm::StringRef Name;
+    llvm::StringRef Name = "";
     FieldDecl* Field = nullptr;
 public:
     AccessExpr(SrcSpan span, Expr* base, llvm::StringRef name)
@@ -107,7 +106,7 @@ class SliceExpr : public QualExpr {
 public:
     static constexpr Kind ClassKind = SliceExprKind;
 private:
-    Expr* Start;
+    Expr* Start = nullptr;
 
     // TODO: Should eventually support slicing
     // size_t End;
@@ -155,8 +154,8 @@ public:
     };
 private:
     OpKind Op;
-    Expr* LHS;
-    Expr* RHS;
+    Expr* LHS = nullptr;
+    Expr* RHS = nullptr;
 public:
     BinaryOperator(SrcSpan span, OpKind op, Expr* lhs, Expr* rhs)
         : Expr(ClassKind, span), Op(op), LHS(lhs), RHS(rhs) {}
@@ -229,12 +228,12 @@ public:
         Not         // Negate operator; turns a true value false and vice versa. Syntax: !
     };
 private:
+    OpKind Op;
+    Expr* Sub = nullptr;
+
     // Only used in combination with Deref or Adress. Indicates
     // wether the pointer is raw or a reference.
     bool IsRawPtr = false;
-
-    OpKind Op;
-    Expr* Sub;
 public:
     UnaryOperator(SrcSpan span, OpKind op, Expr* sub, bool isRawPtr = false)
         : Expr(ClassKind, span), Op(op), Sub(sub), IsRawPtr(isRawPtr) {}
@@ -302,7 +301,7 @@ private:
     // Pointer to the declaration of the callee. Can be either FunctionDecl* or StructDecl*
     NamedDecl* DC = nullptr;
 
-    llvm::StringRef Callee;
+    llvm::StringRef Callee = "";
     llvm::SmallVector<Expr*> Arguments = {};
 public:
     CallExpr(SrcSpan span, llvm::StringRef callee)
@@ -328,8 +327,8 @@ public:
         DC = decl;
     }
 
-    void setArguments(llvm::SmallVector<Expr*>&& args) {
-        Arguments = args;
+    void setArguments(llvm::ArrayRef<Expr*> args) {
+        Arguments.assign(args.begin(), args.end());
     }
 
     size_t getAmntArgs() const {
@@ -353,7 +352,7 @@ class DeclRefExpr : public Expr {
 public:
     static constexpr Kind ClassKind = DeclRefExprKind;
 private:
-    llvm::StringRef Name;
+    llvm::StringRef Name = "";
 
     // Can be FunctionDecl or VarDecl
     NamedDecl* DC = nullptr;
@@ -387,10 +386,10 @@ public:
     static constexpr Kind ClassKind = ArrayLiteralKind;
 private:
     bool IsConstant = false;
-    llvm::SmallVector<Expr*> Items;
+    llvm::SmallVector<Expr*> Items = {};
 public: 
-    ArrayLiteral(SrcSpan span, llvm::SmallVector<Expr*>&& items = {})
-        : Expr(ClassKind, span), Items(std::move(items)) {}
+    ArrayLiteral(SrcSpan span, llvm::ArrayRef<Expr*> items = {})
+        : Expr(ClassKind, span), Items(items.begin(), items.end()) {}
 
     static bool classof(const Stmt* s) {
         return s->getKind() == ClassKind;
@@ -404,8 +403,8 @@ public:
         IsConstant = v;
     }
 
-    void setItems(llvm::SmallVector<Expr*>&& items) {
-        Items = std::move(items);
+    void setItems(llvm::ArrayRef<Expr*> items) {
+        Items.assign(items.begin(), items.end());
     }
 
     size_t getAmntItems() const {
@@ -429,7 +428,7 @@ class IntegerLiteral : public Expr {
 public:
     static constexpr Kind ClassKind = IntegerLiteralKind;
 private:
-    llvm::APInt Value;
+    llvm::APInt Value = llvm::APInt();
 public:
     IntegerLiteral(SrcSpan span, llvm::APInt value)
         : Expr(ClassKind, span), Value(value) {}
@@ -451,7 +450,7 @@ class FloatingLiteral : public Expr {
 public:
     static constexpr Kind ClassKind = FloatingLiteralKind;
 private:
-    llvm::APFloat Value;
+    llvm::APFloat Value = llvm::APFloat(0.0);
 public:
     FloatingLiteral(SrcSpan span, llvm::APFloat value)
         : Expr(ClassKind, span), Value(value) {}
@@ -473,7 +472,7 @@ class BooleanLiteral : public Expr {
 public:
     static constexpr Kind ClassKind = BooleanLiteralKind;
 private:
-    bool Value;
+    bool Value = false;
 public:
     BooleanLiteral(SrcSpan span, bool value)
         : Expr(ClassKind, span), Value(value) {}
