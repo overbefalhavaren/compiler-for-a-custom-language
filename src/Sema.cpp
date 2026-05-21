@@ -50,17 +50,17 @@ T* LookupResult::getAsSingle() const {
 
 LookupResult Lookup::findKind(ast::Decl::Kind kind) const {
     Scope* current = LookupScope;
-    while (true) {
+    while (current != nullptr) {
         for (ast::NamedDecl* DC : current->decls())
             if (DC->getKind() == kind && DC->getName() == Name)
                 return LookupResult(DC);
 
-        if (!current->hasParent())
-            return LookupResult();
         if (current->isFunctionPrototypeScope() && LocalOnly)
             return LookupResult();
         current = current->getParent();
     }
+
+    return LookupResult();
 }
 
 LookupResult Lookup::doLookup(bool isSingle) const {
@@ -68,8 +68,7 @@ LookupResult Lookup::doLookup(bool isSingle) const {
 
     LookupFilter is_lookup_kind = getLookupFilter();
     Scope* current = getStartScope();
-
-    while (true) {
+    while (current != nullptr) {
         for (ast::NamedDecl* DC : current->decls()) {
             if (is_lookup_kind(DC) && DC->getName() == Name) {
                 if (isSingle)
@@ -79,8 +78,6 @@ LookupResult Lookup::doLookup(bool isSingle) const {
             }
         }
 
-        if (!current->hasParent())
-            break;
         if (current->isFunctionPrototypeScope() && LocalOnly)
             break;
 
@@ -190,7 +187,6 @@ bool Sema::validateTypeCast(const Type* from, const Type* to, bool isExplicit) {
         if (to_ptr->isRaw() != from_ptr->isRaw())
             return true;
 
-        DEBUG("valdateTypeCast recurse 1");
         return validateTypeCast(
             from_ptr->getPointee(), to_ptr->getPointee(), isExplicit
         );
@@ -205,7 +201,6 @@ bool Sema::validateTypeCast(const Type* from, const Type* to, bool isExplicit) {
         if (to_arr->getInitSize() < from_arr->getInitSize())
             return true;
         
-        DEBUG("validateTypeCast recurse 2");
         return validateTypeCast(
             from_arr->getElemType(), to_arr->getElemType(), isExplicit
         );
@@ -399,12 +394,9 @@ bool Sema::analyzeModuleDecl(ModuleDecl* DC, Scope* scope) {
     Scope mod(scope, Scope::ModuleScope);
     // mod.setEntity(DC);
 
-    for (Decl* member : DC->decls()) {
-        DEBUG("loop module start");
+    for (Decl* member : DC->decls())
         if (analyzeDecl(member, &mod))
             return true;
-        DEBUG("loop module end\n");
-    }
     return false;
 }
 
@@ -570,7 +562,6 @@ bool Sema::analyzeBlockStmt(BlockStmt* ST, Scope* scope) {
     body.setFnPrototype(scope->getFnPrototype());
 
     for (Stmt* s : ST->stmts()) {
-        DEBUG("loop block start");
         if (auto DC = llvm::dyn_cast<DeclStmt>(s)) {
             if (!llvm::isa<VarDecl>(DC->getDecl())) {
                 llvm::outs() << "Only variable declarations are allowed inside the body of a function.\n";
@@ -584,7 +575,6 @@ bool Sema::analyzeBlockStmt(BlockStmt* ST, Scope* scope) {
                 return true;
         } else if (analyzeStmt(s, &body))
             return true;
-        DEBUG("loop block end\n");
     }
 
     return false;
@@ -952,7 +942,6 @@ bool Sema::analyzeCallExpr(CallExpr* EX, Scope* scope) {
     }
     
     for (size_t i = 0; i < params.size(); i++) {
-        DEBUG("loop call start");
         if (i < EX->getAmntArgs()) {
             Expr* arg = EX->getArg(i);
             // TODO: Condiser adding logic to create a Scope with a flag for 
@@ -973,7 +962,6 @@ bool Sema::analyzeCallExpr(CallExpr* EX, Scope* scope) {
             llvm::outs() << "Mismatched call to .\n";
             return true;
         }
-        DEBUG("loop call end\n");
     }
 
     return false;
@@ -1001,7 +989,6 @@ bool Sema::analyzeArrayLiteral(ArrayLiteral* EX, Scope* scope) {
     const Type* ty = nullptr;
     bool all_constant = true;
     for (Expr* it : EX->items()) {
-        DEBUG("loop array start");
         if (analyzeExpr(it, scope, false))
             return true;
 
@@ -1015,7 +1002,6 @@ bool Sema::analyzeArrayLiteral(ArrayLiteral* EX, Scope* scope) {
         it->setType(ty);
         if (all_constant)
             all_constant = ArrayItemIsConstant(it);
-        DEBUG("loop array end\n");
     }
 
     EX->setType(Alloc.Create<ArrayType>(ty, EX->getAmntItems()));

@@ -33,10 +33,6 @@
 
 using namespace c;
 
-#define IS_TEST_BUILD true
-#define DEBUG_DUMP_AST true
-#define DEBUG_EMIT_FAULTY_IR true
-
 llvm::StringRef EXEPath;
 
 struct Compiler {
@@ -65,9 +61,6 @@ bool handleCommandLineArguments(Compiler& instance, llvm::ArrayRef<llvm::StringR
     instance.CompilerPath = args[0];
     DEBUG("cl 2");
 
-#if IS_TEST_BUILD
-    instance.MainFilePath = "C:/Users/LUOST001/Documents/GitHub/gymnasiearbete-2526-LucasISkolan/CompileMe.txt";
-#else
     if (args.size() == 1) {
         llvm::outs() << "No input file.\n";
         return true;
@@ -77,13 +70,13 @@ bool handleCommandLineArguments(Compiler& instance, llvm::ArrayRef<llvm::StringR
         llvm::outs() << "No versions yet!\n";
         std::exit(0);
     } else {
-        instance.MainFilePath = args[0];
+        instance.MainFilePath = args[1];
         if (SourceManager::normalize(instance.MainFilePath)) {
             llvm::outs() << "File not found: '" << args[0] << "'.\n";
             return true;
         }
     }
-#endif // IS_TEST_BUILD
+
     DEBUG("cl 3");
     if (args.size() <= 2) {
         DEBUG("cl 3.1.1");
@@ -102,6 +95,7 @@ bool handleCommandLineArguments(Compiler& instance, llvm::ArrayRef<llvm::StringR
 }
 
 bool initTarget(Compiler& instance) {
+    // FIXME: Commented out because of linking error
     // llvm::InitializeNativeTarget();
     // llvm::InitializeNativeTargetAsmPrinter();
     // llvm::InitializeNativeTargetAsmParser();
@@ -159,10 +153,10 @@ bool emit(Compiler& instance) {
         return true;
     }
     
-#if DEBUG_DUMP_AST
+#if COMPILER_DEBUG_ENABLED
     DEBUG("emit 1.5");
     instance.Dumper->dump(instance.TopModule);
-#endif // DEBUG_DUMP_AST
+#endif // COMPILER_DEBUG_ENABLED
 
     DEBUG("emit 2");
     if (instance.SemaAnalasys->analyze(instance.TopModule)) {
@@ -170,14 +164,20 @@ bool emit(Compiler& instance) {
         return true;
     }
 
+#if COMPILER_DEBUG_ENABLED
+    DEBUG("emit 1.5");
+    instance.Dumper->dump(instance.TopModule);
+#endif // COMPILER_DEBUG_ENABLED
+
     DEBUG("emit 3");
     instance.CGModule->emitModule(*instance.TopModule);
-#if !DEBUG_EMIT_FAULTY_IR
     if (llvm::verifyModule(*instance.Mod, &llvm::outs())) {
         llvm::outs() << "IR verification error\n";
+// We want to emit the IR if debug is enabled so we can look at and debug the IR
+#if !COMPILER_DEBUG_ENABLED
         return true;
+#endif // COMPILER_DEBUG_ENABLED
     }
-#endif // DEBUG_EMIT_FAULTY_IR
 
     DEBUG("emit 3");
     std::error_code ec;
@@ -219,7 +219,6 @@ int main(int argc, const char* argv[]) {
     DEBUG("main 4");
 
     auto file_or_err = instance.SrcManager.getSource(instance.MainFilePath);
-    DEBUG("main 4.1");
     // if (auto file_or_err = instance.SrcManager.getSource(instance.MainFilePath)) {
     if (file_or_err) {
         DEBUG("main 4.1.1");
@@ -271,8 +270,7 @@ int main(int argc, const char* argv[]) {
     if (emit(instance))
         return 1;
 
-#ifdef IS_TEST_BUILD
-    llvm::outs() << "Congratulations! It didn't crash!\n";
-#endif
+    DEBUG("Congratulations! It didn't crash!");
+
     return 0;
 }

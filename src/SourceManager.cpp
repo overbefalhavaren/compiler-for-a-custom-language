@@ -53,13 +53,15 @@ llvm::ErrorOr<Source&> SourceManager::getSource(llvm::StringRef path) {
     auto id_lookup = IDCache.find(path);
     if (id_lookup != IDCache.end())
         return *SourceCache[FileIDToIndex(id_lookup->second)];
+
     auto file_or_err = FS->openFileForRead(path);
-    file_or_err.get();
     if (!file_or_err)
         return file_or_err.getError();
+
     auto buff_or_err = file_or_err.get()->getBuffer(path);
     if (!buff_or_err)
         return buff_or_err.getError();
+        
     return cacheBuffer(std::move(buff_or_err.get()), path);
 }
 

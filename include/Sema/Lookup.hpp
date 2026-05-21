@@ -66,8 +66,8 @@ private:
     llvm::StringRef Name = "";
     Scope* LookupScope = nullptr;
 public:
-    Lookup(Scope* lookup, llvm::StringRef name, LookupKind kind = Any, bool localOnly = false)
-        : LookupScope(lookup), Name(name), Kind(kind), LocalOnly(localOnly) {}
+    Lookup(Scope* scope, llvm::StringRef name, LookupKind kind = Any, bool localOnly = false)
+        : LookupScope(scope), Name(name), Kind(kind), LocalOnly(localOnly) {}
 
     LookupResult find() const {
         return doLookup(true);
