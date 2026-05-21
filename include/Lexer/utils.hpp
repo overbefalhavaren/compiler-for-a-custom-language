@@ -3,7 +3,8 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 
-#include "include/lexer/token.hpp"
+#include "include/Lexer/Token.hpp"
+#include "include/AST/Type.hpp"
 
 namespace c {
 namespace lexer {
@@ -17,25 +18,36 @@ namespace lexer {
  * is_ident_start() -> _A-Za-z
  */
 
-inline bool is_alpha(char c) { return llvm::isAlpha(c); }
-inline bool is_digit(char c) { return llvm::isDigit(c); }
-inline bool is_alnum(char c) { return llvm::isAlnum(c); }
+inline bool is_alpha(char c) {
+    return llvm::isAlpha(c);
+}
 
-inline bool is_space(char c) { return llvm::isSpace(c); }
+inline bool is_digit(char c) {
+    return llvm::isDigit(c); 
+}
 
-inline bool is_ident_start(char c)  { return c == '_' || is_alpha(c); }
-inline bool is_ident(char c)        { return c == '_' || is_alnum(c); }
+inline bool is_alnum(char c) {
+    return llvm::isAlnum(c);
+}
 
-// inline bool is_operator(char c);
+inline bool is_space(char c) {
+    return llvm::isSpace(c);
+}
 
-inline const llvm::StringMap<TokenType> get_keywords() {
+inline bool is_ident_start(char c) {
+    return c == '_' || is_alpha(c);
+}
+
+inline bool is_ident(char c) {
+    return c == '_' || is_alnum(c);
+}
+
+inline llvm::StringMap<TokenType> getKeywords() {
     return llvm::StringMap<TokenType>({
         {   "const",    TokenType::Const    },
         {   "let",      TokenType::Let      },
         {   "mut",      TokenType::Mut      },
-        {   "temp",     TokenType::Temp     },
         {   "type",     TokenType::Type     },
-        {   "move",     TokenType::Move     },
         {   "self",     TokenType::Self     },
 
         {   "end",      TokenType::End      },
@@ -59,11 +71,27 @@ inline const llvm::StringMap<TokenType> get_keywords() {
         {   "trait",    TokenType::Trait    },
 
         {   "import",   TokenType::Import   },
-        {   "export",   TokenType::Export   }
     });
 }
 
-// constexpr const llvm::StringMap<TokenType>& get_operators();
+inline llvm::StringMap<BuiltinType::BuiltinKind> getBuiltinMap() {
+    return llvm::StringMap<BuiltinType::BuiltinKind>({
+        {   "bool",     BuiltinType::Bool   },
+
+        {   "i8",       BuiltinType::I8     },
+        {   "i16",      BuiltinType::I16    },
+        {   "i32",      BuiltinType::I32    },
+        {   "i64",      BuiltinType::I64    },
+
+        {   "u8",       BuiltinType::U8     },
+        {   "u16",      BuiltinType::U16    },
+        {   "u32",      BuiltinType::U32    },
+        {   "u64",      BuiltinType::U64    },
+        
+        {   "f32",      BuiltinType::F32    },
+        {   "f64",      BuiltinType::F64    },
+    });
+}
 
 } // namespace lexer
 } // namespace c
