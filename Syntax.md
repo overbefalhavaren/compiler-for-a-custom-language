@@ -1,246 +1,271 @@
-# Syntax Guide
-## For the custom language this compiler is for.
-
-*language info here*
 
 # Declarations
-## Types:
-Types are the most simple types of declarations. There are built in int, uint, float, 
-char and pointer types, structs and impls also count as type declarations. You can 
-declare a type alias with the `type` keyword. It works kind of like the "using" 
-keyword in C++ except you use "type" instead of "using". The format is:
+---
+## Type aliases
+Any type can have an alias declared for it using the `type` keyword. Aliases can be created using the following format:
 
-`type {identifier} = {type}`
+```
+type {identifier} = {type}
+```
 
-***NOTE:*** **Templated types are planned but currently unsupported.**
-For templated types you use `<>` simmilarily to C++:
-`{identifier}<{type}>`
+## Arrays
+Both array types and array literals have built in support, although currently there's only support for statically sized (stack allocated) arrays. 
 
-## Enums:
-***NOTE:*** **Planned but currently not supported.**
+### Array Types
+Array types can be declared within an alias or as type annotation, the syntax is as follows:
+```
+[{type}: {size}]
+```
+Example usage:
+```
+type ArrayT = [i64: 3]
+```
+```
+let numbers: [i64: 3] = getNumbers()
+```
 
-## Variables:
-Three different kinds of variable declarations are supported, compiletime evaluated 
-constants, immutables and mutables. Variable declarations use the format:
+### Array Literals
+Create an array literal using square brackets, define the array's elements within the scope of the square brackets, separate each item with a `,`. All items in an array need to be convertable to the same type, which is defaulted to the type of the first element if implicitly type evaluated. Example of Array Literals:
 
-`{keyword} {identifier}: {type} = {value}`
+Both will be implicitly evaluated as `[i32, 3]`:
+```
+[1, 2, 3]
+```
+```
+[1, getNumber(), 1.0]
+```
 
-In cases where the type can be evalueated at compiletime, for example if the value
-is the return of a function call, the type does not need to be included in the
-declaration:
+## Structs
+Struct types, very simmilar to those in C, are also supported. Attributes of a struct have the same mutability as the struct itself. Struct declarations use the following format:
+```
+struct {identifier}:
+    {attributes}
+end
+```
+Struct attributes can be declared both with and without a default value. Attributes without default value must be declared before those with one.
 
-`{keyword} {identifier} = {value}`
+Attribute without default value:
+```
+{identifier}: {type}
+```
+Attribute with default value:
+```
+{identifier}: {type} = {expression}
+```
+Attribute with default value, automatically type evaluated:
+```
+{identifier} = {expression}
+```
 
-You can use one of the following keywords to declare a variable:
+### Struct Construction
+When constructing an instance of a struct, parameters are passed in the order they were declared in the sturcts declaration. Attributes that have default values do not have to be provided in the call. To construct an instance of a struct, you use the same syntax as function calls, for example:
 
-`const`
-Declare a variable as a compiletime evaluated constant, kind of like constexpr in C++
+```
+struct Player:
+    id: u64
+    level: u32 = 1
+    health = 100
+    alive = true
+end
+```
+Example construction calls:
+```
+Player(createID())
+Player(1234567890, 10)
+Player(1234567890, 1, 0, false)
+```
 
-`let`
-Declare as a runtime evalueated immutable variable (constant). Takes ownership of any 
-value passed into the declaration.
+## Functions
+Functions are declared using the `fn` keyword. Functions can be declared with an optional return type, and the type of a return statemnt must be convertable to that of the functions return type.
 
-`mut`
-Declares a mutable runtime evaluated variable that can have its value reassigned and 
-change dynamically. Also move-by-default just like `let`.
+To create a function with a return type you use the following syntax:
+```
+fn {identifier}({parameters}) -> {type}
+```
+To create a function without a return type you use the following syntax:
+```
+fn {identifier}({parameters})
+```
+All parameters declared for a function must be separated with a `,`. Function parameters can currently only be passed as a mutable copy. Function parameters can be declared both with and without a default value. Parameters without default value must be declared before those with one.
 
-## Functions:
-Function are declared with the `fn` keyword. Function arguments can be mutable passed
-by reference, immutable passed by reference or move only. If you want to copy a value
-you pass to a function argument you need to do so manually with a temporary variable 
-or by using the copy function in the standard library. All arguments defined for a 
-function need to be separated by a `,` as per standard in most languages. The return 
-type of functionsshould be defined if somthing is returned but can be skipped if 
-return is void.
+Parameter without default value:
+```
+{identifier}: {type}
+```
+Parameter with default value:
+```
+{identifier}: {type} = {expression}
+```
+Parameter with default value, automatically type evaluated:
+```
+{identifier} = {expression}
+```
+To declare a body for the function you use the scope syntax; opening  with `:` and closing  with `end`. Example:
+```
+fn add(a: i64, b: i64) -> i64:
+    {code}
+end
+```
 
-Function argument declarations, simmilarly to variable declarations, follow the 
-following declarations format:
+### Function Calls
+To call a function, your write the function name followed by the arguments in the order they were declared int he function declaration, enclosed in parentheses. For example:
+```
+fn createPlayer(id: u64, level: u32 = 1, health = 100, alive = true) -> Player
+```
+Example calles:
+```
+createPlayer(createID())
+createPlayer(1234567890, 10)
+createPlayer(1234567890, 1, 0, false)
+```
 
-`{keyword} {identifier}: {type}`
-Or with default value:
-`{keyword} {identifier}: {type} = {value}`
-With no keyword (passed as immutable reference)
-`{keyword} {identifier}: {type}`
+## Variables
+Multible different variable declarations are supported. The language supports constants, immutables and mutables using different keywords. Currently constants are not compiletime evaluated and in practice function the same as an immutable, but this is panned to change in the future. Note that any value passed into a variable declaration will be copied.
 
-Note that arguments with a default value must be declared chronologically after
-those without one as per standard in most languages. For 
+Variable declarations use the following format:
+```
+{keyword} {identifier}: {type} = {expression}
+```
+The type can also be implicitly evaluated during compiletime, allowing you to declare a variable without explicitly providing a type:
+```
+{keyword} {identifier} = {expression}
+```
+The following keywords can be used to declare a variable:
 
-The following keywords can be 
-used for declaring function arguments:
+`const` — Right now this works the same as `let`, in the future this will create a compiletime evaluated constant.
 
-No keyword for an argument means the value will be passed as an immutable reference.
+`let` — Declares a runtime evaluated value which can not be changed. 
 
-`mut`
-Mutable argument passed by reference.
-
-`move`
-Mutable argument. Takes ownership of the passed value.
-
-Function declarations follow the following format:
-
-`fn {identifier}({argumet}) -> {type}`
-If there are multible arguments they need to be separated by a `,`:
-`fn {identifier}({arg1}, {arg2}) -> {type}`
-Or with no arguments:
-`fn {identifier}() -> {type}`
-With void (no) return:
-`fn {identifier}()`
-
-### Example function declarations
-Example function declarations:
-`fn add(a: i64, b: i64) -> i64:`
-`    return a + b`
-`end`
-
-## Structs:
-A struct, just like in C, is a very basic data structure, basically just a collection
-of variables. Struct attributes also can't have mutability, which is instead applied
-to the instance of the struct. All attributes of basic structs are *public*, this is 
-for simplicity, if you however add an impl to the struct, all attributes instead 
-become *private* by default. To make a private attribute of a struct public, you 
-prefix the declaration with the `pub` keyword. `pub` can also be added to attributes
-of structs that don't have an impl, which doesn't do anything. We consider it good
-practice to prefix the attributes with `pub` if the struct in question migth get an
-impl in the future.
-
-Basic struct declaration:
-`struct MyStruct:`
-`   name: Str           // No default value`
-`   value: Str = "None" // With default value`
-`end`
-
-### Constructing an instance
-To construct an instance of a struct without an impl you call it simmalarily to a 
-function, but with some important differences. To make it simple distinguish a 
-struct construction from normal function calls we use curly braces instead of normal
-parethesis for the call.
-
-Example struct:
-`struct User:`
-`   name: Str`
-`   id: u64`
-`   email: Str = ""`
-`   is_premium: bool = false`
-`end`
-
-Example construction:
-`let user = User{"John", 1234567890, john.smith@gmail.com, false}`
-Example of not passing arguments with default values:
-`let user = User{"John", 1234567890}`
-Example with argument names:
-`let user = User{name="John", id=1234567890}`
-
-## Impls:
-***NOTE:*** **Planned but currently not supported.**
+`mut` — Declares a runtime evaluated variable which can have its value change at any time.
 
 # Statements
-## If Statements
-An if statement is declared with the `if` keyword, if you want a following 
-conditional else (else if), use the `elif` keyword or `else` for a non-conditional
-else, just like is standard in python. You do not need to add closing `end` to the
-conditions except for the last one. 
+---
+## If, Elif And Else
 
-The boolean conditions for the if-statements are the same as in rust. You can either
-make a boolean condition, where assignment is generally disallowed or declare a new 
-variable as the condition, in which case the value of the variable is boolean 
-evaluated. The lifetime of the variable is until the end of the if-else tree. 
+The condition of an `if` or `elif` statement must be convertable to boolean.
 
-Example if statement with regular condition:
-`if x <= 10:`
-`    return x`
-`end`
-Example with declaration:
-`if let x = y:`
-`    return x`
-`end`
+Short summary of syntax:
 
-Example if-else tree:
-`if let x = y[0]:`
-`   return y`
-`elif y[1] == 1:`
-`   return y[1]`
-`else:`
-` y[0] = 1`
-`end // "x" is destroyed here`
+With Scope:
+```
+if {condition}:
+    {code}
+end
+```
 
-## While loops
-There is not really much to say about while loops. They are very standard. You simply
-just loop until the condition is not true anymore. The condition however, needs to be
-an expression; you can not have a declaration as the condition of a while loop.
+Without scope, only works for single line body. This also works the same for elif and else:
+```
+if {condition}
+    {code}
+```
 
-Regular condition, very basic:
-`mut running = true`
-`while running:`
-`   running = some_call()`
-`end`
+With elif and else:
+```
+if {condition}:
+    {code}
+elif {condition}:
+    {code}
+else:
+    {code}
+end
+```
 
-## For loops
-For loops in this language are exclusively for-each. You pass an iterable into the for
-loop and it iterates over the items one by one. The items are stored by reference and 
-have the same mutability as their iterator (owner).
+## While
 
-Syntax:
-`for {name} in {iterable}`
+The condition of a while statement must be convertable to boolean.
 
-For each:
-`for each in iterator:`
-`   do_somthing()`
-`end`
-For range:
-`for i in 0->10`
-`   do_somthing`
-`end`
+Short summary of syntaxt:
 
-## Match (switch) statements
-***NOTE:*** **Planned but currently not supported.**
+With Scope:
+```
+while {condition}:
+    {code}
+end
+```
+
+Without scope, only works if the body is only a single line:
+
+```
+while {condition}
+    {code}
+```
+
+## Return
+Create return statements with the `return` keyword. The type of return statements (the value they return) must be convertable to the type fo the function they are in. Return statements must return a value unless the function is missing a return type, in which case returns instead can't return a value.
+
+Return statement for function without return type:
+```
+return
+```
+Return statement for functions that do have a return type:
+```
+return {expression}
+```
 
 # Expressions
-## Range operator
-***NOTE:*** **Planned but currently not supported.**
+---
+## Attribute Access
+To access an attribute of a struct use the following syntax:
 
-# Imports
-***NOTE:*** **Planned but currently not supported.**
-You can import files in a couple different ways, both using file paths and library 
-names. Both absolute paths and relative paths are allowed. If importing paths, 
-both "/" and "\" are supported but it is reccomended to use "/". If importing with 
-paths, the path needs to be a string literal, i.e prefixed and suffixed with a ".
-Otherwise if importing libraries and/or modules, each module is separated with 
-"::", a directory counts as a module. Imports are done withthe `import` keyword and
-imported files will be imported as a namespace with the same name as the file minus
-the file extention. You can use the `->` operator toimport the file with a different
-name. You can also choose to import specific attributes from a file by specifying 
-said attributes.
+`{expression}.{identifier}`
 
-Imports using file paths can use an absolute path or a relative path. Imports using
-relative paths start in the current files directory. Relative paths in the current
-directory should start with "./" or "/", both start in the current directory. if 
-you want to path *backwards*, i.e go to the parent directory of the current 
-directory, you just progressively add "." at the start of the path for each time 
-you want to go to a parent directory. If pathing to like this, "./" will be the 
-current directory. Importing like this just imports all public attributes into
-a namespace that shares. Importing using file paths (especially relative paths) is
-the reccomended approach for importing internally in a library.
+## Array Indexing
+To get an index of an array you use the following syntax, note that currently, only integer literals are supported as the index.
 
-These start in the same directory which is the current directory:
-`import "/file.txt"`
-`import "./file.txt"`
-Import a file from the parent directory of the current directory:
-`import "../file.txt"`
+`{expression}[{index}]`
 
-Importing modules is pretty simmilar in idea to imports in the python programming
-language. Files and directories need to follow the same naming convention as other
-things like variables, functions, structs, etc.
+## Binary Operators
+Note that in the following examples, identifier `a` and identifier `b` represent an expression of any kind.
 
-Import a module (namespace) from the standard library:
-`import stdlib::math`
-Import multible modules:
-`import stdlib::array, hashmap`
-Import multible attributes from a module:
-`import stdlib::math::add, sub, div, mul`
+### Assignment
 
-Import a module with an alias name:
-`import stdlib::math -> m`
-Import multible modules with aliases:
-`import stdlib::math -> m, logging -> log`
-Import module attrubutes as aliases:
-`import stdlib::math::dot -> d, matmul -> mmul`
+`a = b` — Assignment.
+
+`a += b` — Assign the result of `a` plus `b`.
+
+`a -= b` — Assign the result of `a` minus `b`.
+
+`a *= b` — Assign the result of `a` times `b`.
+
+`a /= b` — Assign the result of `a` diveded by `b`.
+
+### Arithmetic
+`a + b` — Return the result of `a` plus `b`.
+
+`a - b` — Return the result of `a` minus `b`.
+
+`a * b` — Return the result of `a` times `b`.
+
+`a / b` — Return the result of `a` divided by `b`.
+
+### Comparison
+
+`a == b` — Equivilence comparison.
+
+`a != b` — Negative equivilence comparison.
+
+`a > b` — `a` more than `b`.
+
+`a >= b` — `a` more than or equal to `b`.
+
+`a < b` — `a` less than `b`.
+
+`a <= b` — `a` less than or equal to `b`.
+
+### Logical
+`&&` — And gate
+
+`||` — Or gate
+
+## Unary Operators
+Note that in the following examples, identifier `a` represents an expression.
+
+`a++` — Add one to `a`.
+
+`a--` — Subtract one from `a`.
+
+`+a` — Does nothing, only exists as an opposite of the `-` unary operator.
+
+`-a` — Convert `a` to a negative number.
+
+`!a` — Convert a true boolean evaluation into a false one and vice versa.
