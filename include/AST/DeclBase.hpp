@@ -4,6 +4,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include <concepts>
 
 #include "include/AST/Type.hpp"
 #include "include/AST/TypeInfo.hpp"
@@ -23,14 +24,14 @@ public:
     enum Kind {
         firstDecl,
         firstNamedDecl = firstDecl,
-        
+
         firstTypeDecl = firstDecl,
         TypeAliasDeclKind = firstTypeDecl,
         EnumDeclKind,   // NOTE: Planned but currently not implemented
         TraitDeclKind,  // NOTE: Planned but currently not implemented
         StructDeclKind,
         lastTypeDecl = StructDeclKind,
-        
+
         firstValueDecl,
 
         firstInitDecl = firstValueDecl,
@@ -41,7 +42,7 @@ public:
 
         FunctionDeclKind,
         lastValueDecl = FunctionDeclKind,
-        
+
         ModuleDeclKind,
         lastNamedDecl = ModuleDeclKind,
 
@@ -52,7 +53,7 @@ public:
     };
 private:
     Kind DeclKind;
-    SrcSpan Span = SrcSpan();
+    SrcSpan Span = {};
     Container* DeclContainer = nullptr;
 protected:
     Decl(Kind DK, SrcSpan span)
@@ -99,13 +100,13 @@ public:
 
 class NamedDecl : public Decl {
 private:
-    llvm::StringRef Name = "";
+    llvm::StringRef Name = {};
 protected:
     NamedDecl(Kind DK, SrcSpan span, llvm::StringRef name)
         : Decl(DK, span), Name(name) {}
 public:
     static bool classof(const Decl* d) {
-        return d->getKind() >= firstNamedDecl && 
+        return d->getKind() >= firstNamedDecl &&
                d->getKind() <= lastNamedDecl;
     }
 
@@ -122,7 +123,7 @@ protected:
         : NamedDecl(DK, span, name), Ty(nullptr) {}
 public:
     static bool classof(const Decl* d) {
-        return d->getKind() >= firstTypeDecl && 
+        return d->getKind() >= firstTypeDecl &&
                d->getKind() <= lastTypeDecl;
     }
 
@@ -143,7 +144,7 @@ protected:
         : NamedDecl(DK, span, name), Info(info) {}
 public:
     static bool classof(const Decl* d) {
-        return d->getKind() >= firstValueDecl && 
+        return d->getKind() >= firstValueDecl &&
                d->getKind() <= lastValueDecl;
     }
 
@@ -173,7 +174,7 @@ protected:
         : ValueDecl(DK, span, name, info), Init(init) {}
 public:
     static bool classof(const Decl* d) {
-        return d->getKind() >= firstInitDecl && 
+        return d->getKind() >= firstInitDecl &&
                d->getKind() <= lastInitDecl;
     }
 
@@ -200,7 +201,7 @@ public:
         friend class Container; // To access the lookup map of Container
     private:
         Container& LookupContainer;
-        llvm::StringRef Name = "";
+        llvm::StringRef Name = {};
 
         bool HasCachedLookup = false;
         llvm::ArrayRef<NamedDecl*> Lookup = {};
@@ -211,7 +212,13 @@ public:
             : LookupContainer(lookup), Name(name) {}
 
         template <typename T>
-        T* get();
+        requires std::derived_from<T, NamedDecl>
+        T* get() {
+            for (NamedDecl* DC : getLookup())
+                if (isa<T>(DC))
+                    return llvm::cast<T>(DC);
+            return nullptr;
+        }
 
         NamedDecl* getKind(Decl::Kind kind);
 

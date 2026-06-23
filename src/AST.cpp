@@ -6,8 +6,6 @@
 
 #include "include/AST/Decl.hpp"
 
-#include "src/Debug.hpp"
-
 namespace c {
 namespace ast {
 
@@ -24,17 +22,6 @@ llvm::ArrayRef<NamedDecl*>& Container::LookupResult::getLookup() {
     return Lookup;
 }
 
-template <typename T>
-T* Container::LookupResult::get() {
-    static_assert(std::is_base_of_v<Decl, T> && "T must be subclass of Decl.");
-    static_assert(std::is_base_of_v<NamedDecl, T> && "T must be a subclass of NamedDecl.");
-    
-    for (NamedDecl* DC : getLookup())
-        if (isa<T>(DC))
-            return llvm::cast<T>(DC);
-    return nullptr;
-}
-
 NamedDecl* Container::LookupResult::getKind(Decl::Kind kind) {
     for (NamedDecl* DC : getLookup())
         if (DC->getKind() == kind)
@@ -43,7 +30,7 @@ NamedDecl* Container::LookupResult::getKind(Decl::Kind kind) {
 }
 
 void Container::constructLookupMap() {
-    for (Decl* DC : decls()) 
+    for (Decl* DC : decls())
         if (llvm::isa<NamedDecl>(DC))
             pushDeclToLookupMap(llvm::cast<NamedDecl>(DC));
 }
@@ -58,11 +45,11 @@ void Container::pushDeclToLookupMap(NamedDecl* DC) {
 
 bool Expr::isTypeDependant() const {
     // Currently we don't have any Expr that's type dependant
-    return false; 
+    return false;
 }
 
 bool Expr::isPlace() const {
-    // NOTE: This switch statement only includes expression kinds that 
+    // NOTE: This switch statement only includes expression kinds that
     // are implemented and have classes implemented for them.
     switch (getKind()) {
         default:
@@ -77,8 +64,8 @@ bool Expr::isPlace() const {
             if (llvm::isa<StructDecl>(llvm::cast<CallExpr>(this)->getCalleeDecl()))
                 return true;
             return false;
-        
-        // TODO: When we implement things like function pointers, namespaces, 
+
+        // TODO: When we implement things like function pointers, namespaces,
         // templates and etc, DeclRefExpr will be able to point to almost any
         // kind of NamedDecl. Logic for this will need to be implemented.
         case DeclRefExprKind:
@@ -88,8 +75,8 @@ bool Expr::isPlace() const {
                 assert(llvm::isa<InitDecl>(DC));
             return true;
 
-        // TODO: When we add functions to structs in the future AccessExpr 
-        // might also point to a function. This will need its own logic 
+        // TODO: When we add functions to structs in the future AccessExpr
+        // might also point to a function. This will need its own logic
         // since a function can't be assigned to.
         case AccessExprKind:
             // No assertion here since the class methods will probably have
@@ -100,7 +87,7 @@ bool Expr::isPlace() const {
             // Both normal array access and the slice syntax return an
             // assignable memory location.
             return true;
-        
+
         case BinaryOperatorKind:
         case ArrayLiteralKind:
         case FloatingLiteralKind:
@@ -137,12 +124,12 @@ llvm::StringRef Decl::getDeclKindName() const {
     switch (DeclKind) {
         default:
             llvm_unreachable("Decl::Kind missing case.");
-        
+
         case StructDeclKind:
             return "StructDecl";
         case TypeAliasDeclKind:
             return "TypeAliasDecl";
-        
+
         case VarDeclKind:
             return "VarDecl";
         case ParamDeclKind:
@@ -170,10 +157,10 @@ llvm::StringRef Stmt::getStmtKindName() const {
 
         case BlockStmtKind:
             return "BlockStmt";
-        
+
         case MatchStmtKind:
             return "MatchStmt";
-        
+
         case ReturnStmtKind:
             return "ReturnStmt";
         case DeclStmtKind:
