@@ -5,7 +5,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#include "include/Lexer/utils.hpp"
+#include "include/Lex/Token.hpp"
 
 using namespace c;
 using namespace c::ast;
@@ -14,7 +14,7 @@ std::string strUnaryOperator(const UnaryOperator& op) {
     switch (op.getOpKind()) {
         default:
             llvm_unreachable("");
-        
+
         case UnaryOperator::OpKind::Deref:
             if (op.isRawPtrOp())
                 return "*";
@@ -40,7 +40,7 @@ std::string strBinaryOperator(const BinaryOperator& op) {
     switch (op.getOpKind()) {
         default:
             llvm_unreachable("");
-        
+
         case BinaryOperator::OpKind::Add:
             return "+";
         case BinaryOperator::OpKind::Sub:
@@ -49,7 +49,7 @@ std::string strBinaryOperator(const BinaryOperator& op) {
             return "*";
         case BinaryOperator::OpKind::Div:
             return "/";
-        
+
         case BinaryOperator::OpKind::Assign:
             return "=";
         case BinaryOperator::OpKind::AddAssign:
@@ -60,7 +60,7 @@ std::string strBinaryOperator(const BinaryOperator& op) {
             return "*=";
         case BinaryOperator::OpKind::DivAssign:
             return "/=";
-        
+
         case BinaryOperator::OpKind::Equal:
             return "==";
         case BinaryOperator::OpKind::NotEqual:
@@ -96,7 +96,7 @@ void ASTDumper::visitDecl(const Decl& DC) {
     Stream << DC.getDeclKindName();
     Stream << " " << &DC << " ";
     Stream << "[" << DC.getStartLoc().getOffset()<< ":" << DC.getEndLoc().getOffset() << "] ";
-    
+
     if (llvm::isa<NamedDecl>(DC) && !llvm::isa<VarDecl>(DC))
         Stream << llvm::cast<NamedDecl>(DC).getName();
 
@@ -118,7 +118,7 @@ void ASTDumper::visitDecl(const Decl& DC) {
             for (Decl* D : SD.decls()) {
                 if (D == SD.decls().back()) {
                     newline(true);
-                } else 
+                } else
                     newline(false);
                 visitDecl(*D);
             }
@@ -132,7 +132,7 @@ void ASTDumper::visitDecl(const Decl& DC) {
                 Stream << "const";
             } else if (VD.isMutable()) {
                 Stream << "mut";
-            } else 
+            } else
                 Stream << "let";
             Stream << " " << VD.getName();
 
@@ -201,7 +201,7 @@ void ASTDumper::visitDecl(const Decl& DC) {
             for (Decl* D : MD.decls()) {
                 if (D == MD.decls().back()) {
                     newline(true);
-                } else 
+                } else
                     newline(false);
                 visitDecl(*D);
             }
@@ -223,7 +223,7 @@ void ASTDumper::visitStmt(const Stmt& ST) {
     switch (ST.getKind()) {
         default:
             llvm_unreachable("Stmt::Kind missing condition");
-        
+
         case Stmt::IfStmtKind: {
             auto IS = llvm::cast<IfStmt>(ST);
             Stream << "if";
@@ -233,7 +233,7 @@ void ASTDumper::visitStmt(const Stmt& ST) {
                 indent();
                 newline(false);
                 visitExpr(*cur->getCondition());
-                
+
                 if (cur->hasElse()) {
                     newline(false);
                 } else
@@ -245,7 +245,7 @@ void ASTDumper::visitStmt(const Stmt& ST) {
                         newline(false);
                         cur = next;
                         Stream << "IfStmt " << cur << " ";
-                        Stream << "[" << cur->getStartLoc().getOffset() << ":" 
+                        Stream << "[" << cur->getStartLoc().getOffset() << ":"
                                << cur->getEndLoc().getOffset() << "] ";
                         Stream << "elif";
                         continue;
@@ -328,7 +328,7 @@ void ASTDumper::visitExpr(const ast::Expr& EX) {
                 newline(false);
                 visitExpr(*AE.getBase());
                 newline(true);
-                Stream << AE.getFieldDecl()->getKind() << " " 
+                Stream << AE.getFieldDecl()->getKind() << " "
                        << AE.getFieldDecl() << " " << AE.getFieldDecl()->getName();
                 indent();
                 visitType(AE.getFieldDecl()->getType());
@@ -393,7 +393,7 @@ void ASTDumper::visitExpr(const ast::Expr& EX) {
                     newline(true);
                 } else
                     newline(false);
-                // Stream << CE.getCalleeDecl()->getDeclKindName() << " " 
+                // Stream << CE.getCalleeDecl()->getDeclKindName() << " "
                 //        << CE.getCalleeDecl() << " " << CE.getCalleeDecl()->getName();
                 visitDecl(*CE.getCalleeDecl());
             }
@@ -417,7 +417,7 @@ void ASTDumper::visitExpr(const ast::Expr& EX) {
                 visitType(DE.getType());
                 newline(true);
                 visitDecl(*DE.getDecl());
-                // Stream << DE.getDecl()->getDeclKindName() << " " 
+                // Stream << DE.getDecl()->getDeclKindName() << " "
                 //        << DE.getDecl() << " " << DE.getDecl()->getName();
                 dedent();
             }
@@ -487,7 +487,7 @@ void ASTDumper::visitType(const Type* Ty, bool unfoldNested) {
         Stream << llvm::cast<StructType>(Ty)->getDecl()->getName();
     } else if (Ty->isBuiltinTy()) {
         auto BT = llvm::cast<BuiltinType>(Ty);
-        for (auto& entry : lexer::getBuiltinMap()) 
+        for (auto& entry : lex::getBuiltinMap())
             if (entry.getValue() == BT->getBuiltinKind()) {
                 Stream << " " << entry.getKey();
                 break;
@@ -498,7 +498,7 @@ void ASTDumper::visitType(const Type* Ty, bool unfoldNested) {
             Stream << "*";
         } else
             Stream << "&";
-        
+
         if (unfoldNested) {
             indent();
             newline(true);
@@ -535,10 +535,10 @@ void ASTDumper::visitTypeInfo(const ast::TypeInfo& Ty) {
             if (Ty.getArraySize() > 0)
                 Stream << Ty.getArraySize();
             Stream << "]";
-        } else 
+        } else
             llvm_unreachable("TypeInfo::Kind missing condition.");
     }
-    
+
     indent();
     if (Ty.isResolved()) {
         visitType(Ty.getType(), false);

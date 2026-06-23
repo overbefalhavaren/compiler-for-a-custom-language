@@ -1,6 +1,5 @@
 #include <cerrno>
 #include <memory>
-#include <type_traits>
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -12,20 +11,18 @@
 // #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/TargetParser/Host.h"
 // #include "llvm/Target/TargetMachine.h"
 
 #include "include/AST/Decl.hpp"
 #include "include/AST/Parser.hpp"
-#include "include/CodeGen/CodeGenFunction.hpp"
 #include "include/CodeGen/CodeGenModule.hpp"
 #include "include/CodeGen/CodeGenTypes.hpp"
 #include "include/Frontend/ASTAllocator.hpp"
 #include "include/Frontend/ASTVisitor.hpp"
 #include "include/IO/Source.hpp"
 #include "include/IO/SourceManager.hpp"
-#include "include/Lexer/Lexer.hpp"
+#include "include/Lex/Lexer.hpp"
 
 #include "include/Sema/Sema.hpp"
 
@@ -49,7 +46,7 @@ struct Compiler {
     Lexer* Lex = nullptr;
     Parser* Parse = nullptr;
     Sema* SemaAnalasys = nullptr;
-    
+
     llvm::LLVMContext Context = llvm::LLVMContext();
     std::unique_ptr<llvm::Module> Mod = nullptr;
 
@@ -89,7 +86,7 @@ bool handleCommandLineArguments(Compiler& instance, llvm::ArrayRef<llvm::StringR
         DEBUG("cl 3.2.1");
         instance.OutputFilePath = args[1];
     }
-    
+
     DEBUG("cl 4");
     return false;
 }
@@ -152,7 +149,7 @@ bool emit(Compiler& instance) {
         llvm::outs() << "Parser error\n";
         return true;
     }
-    
+
 #if COMPILER_DEBUG_ENABLED
     DEBUG("emit 1.5");
     instance.Dumper->dump(instance.TopModule);
@@ -199,7 +196,7 @@ bool emit(Compiler& instance) {
     return false;
 }
 
-int main(int argc, const char* argv[]) { 
+int main(int argc, const char* argv[]) {
     DEBUG("main 1");
     llvm::SmallVector<llvm::StringRef> args(argc);
     for (int i = 0; i < argc; i++)
@@ -238,7 +235,7 @@ int main(int argc, const char* argv[]) {
     instance.Alloc.createBuiltinTypes();
     DEBUG("main 7");
     instance.TopModule = instance.Alloc.Create<ast::ModuleDecl>(
-        instance.Src->getBufferSpan(), 
+        instance.Src->getBufferSpan(),
         instance.Src->getFilename()
     );
     DEBUG("main 8");
@@ -248,8 +245,7 @@ int main(int argc, const char* argv[]) {
     );
     DEBUG("main 9");
     instance.Lex = new Lexer(
-        instance.Src->getFileID(), 
-        instance.Src->getBufferData()
+        *instance.Src
     );
     DEBUG("main 10");
     instance.Parse = new Parser(

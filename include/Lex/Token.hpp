@@ -1,19 +1,25 @@
 #pragma once
 
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringExtras.h"
 
+#include "include/AST/Type.hpp"
 #include "include/IO/SrcSpan.hpp"
 
 namespace c {
 
-enum class TokenType {
+enum class TokenKind {
     Unknown,    // Unknown or uninitialized token. Mostly just used as a placeholder
-    Eof,        // End Of File  
-    
+    Eof,        // End Of File
+
+    Comment,
+    Indent,
+
     // Identifiers and literals
     Identifier, // Identifier name
-    Int,        // int literal declaration. For example 31415
-    Float,      // float literal declaration. For example 3.1415
+    Integer,    // int literal declaration. For example 31415
+    FloatPoint, // float literal declaration. For example 3.1415
     String,     // String literal declaration. For example "Hello World!"
     Character,  // Character literal declaration. For example 'c'
 
@@ -40,7 +46,7 @@ enum class TokenType {
     Continue,   // Continue to the next iteration of the loop
 
     Fn,         // Used to declare a function
-    Return,     // Standard "return" statement
+    Ret,        // Standard "return" statement
 
     Enum,       // Declare an enum class with advanced typing allowed
     Struct,     // Standard "Struct" declaration
@@ -50,10 +56,10 @@ enum class TokenType {
     Import,     // Import other files/modules
 
     // Operators
-    Plus,           // +
-    Minus,          // -
-    Star,           // *
-    Slash,          // /
+    Plus,           // +    Positive number cast or result of a + b
+    Minus,          // -    Negative number cast or result of a - b
+    Star,           // *    Get/dereference raw pointer or result of a * b
+    Slash,          // /    Result of A divided by B
 
     PlusPlus,       // ++   Increments by one
     MinusMinus,     // --   Decrements by one
@@ -68,47 +74,48 @@ enum class TokenType {
     MoreEqual,      // >=   a is more than or equal to b
     LessEqual,      // <=   a is less than or equal to b
 
-    AmpAmp,         // &&
-    PipePipe,       // ||
-/*  BitAND          // &  Same as "Ampersand"   */
-/*  BitOR,          // |  Same as "Pipe"        */
-    BitXOR,         // !|
-/*  BitNOT,         // !  Same as "Exclamation" */
+    Less,           // <    Less
+    More,           // >    More
 
-    Exclamation,    // !
+    AmpAmp,         // &&   Logical and
+    PipePipe,       // ||   Logical or
+
+    Exclamation,    // !    Regular and Bit "not" oprerator. Converts true to false and vice versa
     Equal,          // =    Assignment operator
-    Ampersand,      // &
-    Pipe,           // |
+    Ampersand,      // &    Get safe pointer or bit AND operator
+    Pipe,           // |    Bit OR opreator
 
+    ExclPipe,       // !|   Bit XOR opreator
+    LShift,         // <<   Left bit shift
+    RShift,         // >>   Right bit shift
+
+    Arrow,          // ->
+
+    // Punctuation
     Colon,          // :
     ColonColon,     // ::
     Comma,          // ,
     Dot,            // .
 
-    Arrow,          // ->   Range Operator
-
-    LShift, RShift, // << and >>
-    Less, More,     // < and >  
-    LParen, RParen, // ( and )
-    LBrace, RBrace, // { and }
-    LBrack, RBrack, // [ and ]
+    LParen,         // (
+    RParen,         // )
+    LCurly,         // {
+    RCurly,         // }
+    LSquare,        // [
+    RSquare,        // ]
 };
 
-llvm::StringRef strTokenType(TokenType type);
-
 class [[nodiscard]] Token {
-private:    
-    TokenType Type;
-    SrcSpan Span;
-
-    // Identifier or data for literals and identifiers.
+private:
+    SrcSpan Span = {};
     llvm::StringRef Data = {};
+    TokenKind Kind = TokenKind::Unknown;
 public:
     Token() = default;
-    Token(TokenType type, SrcSpan&& span) 
-        : Type(type), Span(std::move(span)) {}
-    Token(TokenType type, SrcSpan&& span, llvm::StringRef data)
-        : Type(type), Span(std::move(span)), Data(data) {}
+    Token(TokenKind k, SrcSpan s, llvm::StringRef data)
+        : Span(s), Data(data), Kind(k) {}
+    Token(TokenKind k, SrcLoc loc, const char* data)
+        : Span(loc, loc), Data(data, 1), Kind(k) {}
     ~Token() = default;
 
     Token(Token&&) = default;
@@ -117,8 +124,8 @@ public:
     Token(const Token&) = default;
     Token& operator=(const Token&) = default;
 
-    TokenType getType() const {
-        return Type;
+    TokenKind getType() const {
+        return Kind;
     }
 
     SrcSpan getSpan() const {
@@ -137,12 +144,12 @@ public:
         return Span.getLength();
     }
 
-    bool is(TokenType T) const {
-        return Type == T;
+    bool is(TokenKind k) const {
+        return Kind == k;
     }
 
-    bool isNot(TokenType T) const {
-        return Type != T;
+    bool isNot(TokenKind k) const {
+        return Kind != k;
     }
 
     llvm::StringRef getData() const {
@@ -156,4 +163,23 @@ public:
     bool isOperator() const;
 };
 
+namespace lex {
+
+inline bool isIdent(char c) {
+    return c == '_' || llvm::isAlnum(c);
+}
+
+inline bool isIdentStart(char c) {
+    return c == '_' || llvm::isAlpha(c);
+}
+
+llvm::StringRef strTokenKind(TokenKind type);
+
+const llvm::StringMap<TokenKind>& getKeywords();
+
+const llvm::StringMap<TokenKind>& getOperators();
+
+const llvm::StringMap<BuiltinType::BuiltinKind>& getBuiltinMap();
+
+} // namespace lex
 } // namespace c

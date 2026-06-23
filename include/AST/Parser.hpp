@@ -1,8 +1,8 @@
 #pragma once
 
 #include "include/Frontend/ASTAllocator.hpp"
-#include "include/Lexer/Lexer.hpp"
-#include "include/Lexer/Token.hpp"
+#include "include/Lex/Lexer.hpp"
+#include "include/Lex/Token.hpp"
 
 namespace c {
 
