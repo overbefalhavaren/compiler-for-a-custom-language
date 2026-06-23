@@ -1,8 +1,7 @@
 #include "include/AST/Parser.hpp"
 
-#include <type_traits>
-
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -17,69 +16,69 @@
 using namespace c;
 using namespace c::ast;
 
-ast::BinaryOperator::OpKind getBinaryOperator(TokenType type) {
+ast::BinaryOperator::OpKind getBinaryOperator(TokenKind type) {
     switch (type) {
         default:
             llvm_unreachable(""); // FIXME: Add message
 
-        case TokenType::Plus:
+        case TokenKind::Plus:
             return ast::BinaryOperator::OpKind::Add;
-        case TokenType::Minus:
+        case TokenKind::Minus:
             return ast::BinaryOperator::OpKind::Sub;
-        case TokenType::Star:
+        case TokenKind::Star:
             return ast::BinaryOperator::OpKind::Mul;
-        case TokenType::Slash:
+        case TokenKind::Slash:
             return ast::BinaryOperator::OpKind::Div;
-        
-        case TokenType::Equal:
+
+        case TokenKind::Equal:
             return ast::BinaryOperator::OpKind::Assign;
-        case TokenType::PlusEqual:
+        case TokenKind::PlusEqual:
             return ast::BinaryOperator::OpKind::AddAssign;
-        case TokenType::MinusEqual:
+        case TokenKind::MinusEqual:
             return ast::BinaryOperator::OpKind::SubAssign;
-        case TokenType::StarEqual:
+        case TokenKind::StarEqual:
             return ast::BinaryOperator::OpKind::MulAssign;
-        case TokenType::SlashEqual:
+        case TokenKind::SlashEqual:
             return ast::BinaryOperator::OpKind::DivAssign;
-        
-        case TokenType::EqualEqual:
+
+        case TokenKind::EqualEqual:
             return ast::BinaryOperator::OpKind::Equal;
-        case TokenType::ExclEqual:
+        case TokenKind::ExclEqual:
             return ast::BinaryOperator::OpKind::NotEqual;
-        case TokenType::More:
+        case TokenKind::More:
             return ast::BinaryOperator::OpKind::MoreThan;
-        case TokenType::Less:
+        case TokenKind::Less:
             return ast::BinaryOperator::OpKind::LessThan;
-        case TokenType::MoreEqual:
+        case TokenKind::MoreEqual:
             return ast::BinaryOperator::OpKind::MTEqual;
-        case TokenType::LessEqual:
+        case TokenKind::LessEqual:
             return ast::BinaryOperator::OpKind::LTEqual;
 
-        case TokenType::AmpAmp:
+        case TokenKind::AmpAmp:
             return ast::BinaryOperator::OpKind::And;
-        case TokenType::PipePipe:
+        case TokenKind::PipePipe:
             return ast::BinaryOperator::OpKind::Or;
     }
 }
 
-ast::UnaryOperator::OpKind getUnaryOperator(TokenType type) {
+ast::UnaryOperator::OpKind getUnaryOperator(TokenKind type) {
     switch (type) {
         default:
             llvm_unreachable(""); // FIXME: Add message
 
-        case TokenType::Star:
+        case TokenKind::Star:
             return ast::UnaryOperator::OpKind::Deref;
-        case TokenType::Ampersand:
+        case TokenKind::Ampersand:
             return ast::UnaryOperator::OpKind::Adress;
-        case TokenType::PlusPlus:
+        case TokenKind::PlusPlus:
             return ast::UnaryOperator::OpKind::AddOne;
-        case TokenType::MinusMinus:
+        case TokenKind::MinusMinus:
             return ast::UnaryOperator::OpKind::SubOne;
-        case TokenType::Plus:
+        case TokenKind::Plus:
             return ast::UnaryOperator::OpKind::Plus;
-        case TokenType::Minus:
+        case TokenKind::Minus:
             return ast::UnaryOperator::OpKind::Minus;
-        case TokenType::Exclamation:
+        case TokenKind::Exclamation:
             return ast::UnaryOperator::OpKind::Not;
     }
 }
@@ -98,41 +97,41 @@ private:
 public:
     PrattParser(Parser& parser, ASTAllocator& alloc)
         : P(parser), Alloc(alloc) {}
-    
-    BindingPower getBindingPower(TokenType op) {
+
+    BindingPower getBindingPower(TokenKind op) {
         switch (op) {
             default:
-                llvm_unreachable("Invalid TokenType passed to PrattParser::getBindingPower");
+                llvm_unreachable("Invalid TokenKind passed to PrattParser::getBindingPower");
 
-            case TokenType::Star:
-            case TokenType::Slash:
+            case TokenKind::Star:
+            case TokenKind::Slash:
                 return {70, 71};
 
-            case TokenType::Plus:
-            case TokenType::Minus:
+            case TokenKind::Plus:
+            case TokenKind::Minus:
                 return {60, 61};
 
-            case TokenType::Less:
-            case TokenType::More:
-            case TokenType::LessEqual:
-            case TokenType::MoreEqual:
+            case TokenKind::Less:
+            case TokenKind::More:
+            case TokenKind::LessEqual:
+            case TokenKind::MoreEqual:
                 return {50, 51};
 
-            case TokenType::EqualEqual:
-            case TokenType::ExclEqual:
+            case TokenKind::EqualEqual:
+            case TokenKind::ExclEqual:
                 return {45, 46};
 
-            case TokenType::AmpAmp:
+            case TokenKind::AmpAmp:
                 return {30, 31};
-            case TokenType::PipePipe:
+            case TokenKind::PipePipe:
                 return {20, 21};
 
             // Assignment (right associative)
-            case TokenType::Equal:
-            case TokenType::PlusEqual:
-            case TokenType::MinusEqual:
-            case TokenType::StarEqual:
-            case TokenType::SlashEqual:
+            case TokenKind::Equal:
+            case TokenKind::PlusEqual:
+            case TokenKind::MinusEqual:
+            case TokenKind::StarEqual:
+            case TokenKind::SlashEqual:
                 return {10, 9};
         }
     }
@@ -141,31 +140,31 @@ public:
         DEBUG("Called: parsePrefix");
         switch (P.peekToken().getType()) {
             default:
-                llvm::outs() << "Invalid token: " << strTokenType(P.peekToken().getType()) << ".\n";
+                llvm::outs() << "Invalid token: " << lex::strTokenKind(P.peekToken().getType()) << ".\n";
                 return nullptr;
 
-            case TokenType::Plus:
-            case TokenType::Minus:
-            case TokenType::Exclamation:
-            case TokenType::Star:
-            case TokenType::Ampersand:
+            case TokenKind::Plus:
+            case TokenKind::Minus:
+            case TokenKind::Exclamation:
+            case TokenKind::Star:
+            case TokenKind::Ampersand:
                 return parseUnaryPrefixOperator();
-            case TokenType::LBrack:
+            case TokenKind::LSquare:
                 return parseArrayLiteral();
-            case TokenType::Int:
+            case TokenKind::Integer:
                 return parseIntegerLiteral();
-            case TokenType::Float:
+            case TokenKind::FloatPoint:
                 return parseFloatingLiteral();
-            case TokenType::LParen:
+            case TokenKind::LParen:
                 return parseParenthesis();
-            case TokenType::Identifier:
+            case TokenKind::Identifier:
                 return parseIdentifier();
         }
     }
 
-    bool isUnarySuffixOperator(TokenType T) {
-        return T == TokenType::PlusPlus ||
-               T == TokenType::MinusMinus;
+    bool isUnarySuffixOperator(TokenKind T) {
+        return T == TokenKind::PlusPlus ||
+               T == TokenKind::MinusMinus;
     }
 
     Expr* parseExpr(uint8_t minBP = 0) {
@@ -186,7 +185,7 @@ public:
                 continue;
             }
 
-            TokenType op = P.peekToken().getType();
+            TokenKind op = P.peekToken().getType();
             BindingPower bp = getBindingPower(op);
             if (bp.lbp < minBP)
                 break;
@@ -206,25 +205,25 @@ public:
 
     ArrayLiteral* parseArrayLiteral() {
         DEBUG("Called: parseArrayLiteral");
-        assert(P.peekToken().is(TokenType::LBrack));
+        assert(P.peekToken().is(TokenKind::LSquare));
         SrcLoc start = P.peekToken().getStartLoc();
         llvm::SmallVector<Expr*> items;
-        if (P.nextToken().isNot(TokenType::RBrack))
+        if (P.nextToken().isNot(TokenKind::RSquare))
             while (true) {
-                if (P.peekToken().is(TokenType::Eof)) {
+                if (P.peekToken().is(TokenKind::Eof)) {
                     llvm::outs() << "Unclosed array literal. Expected ']'.\n";
                     return nullptr;
                 }
-                
+
                 Expr* next = parseExpr();
                 if (!next) return nullptr;
 
                 items.push_back(next);
 
-                if (P.peekToken().is(TokenType::RBrack)) {
+                if (P.peekToken().is(TokenKind::RSquare)) {
                     break;
-                } else if (P.peekToken().is(TokenType::Comma)) {
-                    if (P.nextToken().is(TokenType::RBrack)) {
+                } else if (P.peekToken().is(TokenKind::Comma)) {
+                    if (P.nextToken().is(TokenKind::RSquare)) {
                         llvm::outs() << "Unnessesary ','.\n";
                         return nullptr;
                     }
@@ -275,12 +274,12 @@ public:
 
     Expr* parseUnaryPrefixOperator() {
         DEBUG("Called: parseUnaryPrefixOperator");
-        TokenType op = P.peekToken().getType();
+        TokenKind op = P.peekToken().getType();
         SrcLoc start = P.peekToken().getStartLoc();
 
         Expr* rhs = parseExpr(MaxBindingPower);
         if (!rhs) return nullptr;
-        
+
         SrcSpan span(start, rhs->getEndLoc());
         return Alloc.Create<UnaryOperator>(
             span, getUnaryOperator(op), rhs
@@ -291,7 +290,7 @@ public:
         DEBUG("Called: parseParethesis");
         (void)P.nextToken();
         ast::Expr* result = parseExpr(0);
-        if (P.peekToken().isNot(TokenType::RParen)) {
+        if (P.peekToken().isNot(TokenKind::RParen)) {
             llvm::outs() << "Unclosed '('.\n";
             return nullptr;
         }
@@ -305,22 +304,22 @@ public:
         auto result = Alloc.Create<CallExpr>(SrcSpan(), name);
 
         llvm::SmallVector<Expr*> args;
-        if (P.nextToken().isNot(TokenType::RParen))
+        if (P.nextToken().isNot(TokenKind::RParen))
             while (true) {
-                if (P.peekToken().is(TokenType::Eof)) {
+                if (P.peekToken().is(TokenKind::Eof)) {
                     llvm::outs() << "Unclosed function call. Expected ')'.\n";
                     return nullptr;
                 }
-                
+
                 Expr* next = parseExpr();
                 if (!next) return nullptr;
 
                 args.push_back(next);
 
-                if (P.peekToken().is(TokenType::RParen)) {
+                if (P.peekToken().is(TokenKind::RParen)) {
                     break;
-                } else if (P.peekToken().is(TokenType::Comma)) {
-                    if (P.nextToken().is(TokenType::RParen)) {
+                } else if (P.peekToken().is(TokenKind::Comma)) {
+                    if (P.nextToken().is(TokenKind::RParen)) {
                         llvm::outs() << "Unnessesary ','.\n";
                         return nullptr;
                     }
@@ -334,21 +333,21 @@ public:
         (void)P.nextToken();
         return result;
     }
-    
+
     Expr* parseIdentifier() {
         DEBUG("Called: parseIdentifier");
-        assert(P.peekToken().is(TokenType::Identifier));
+        assert(P.peekToken().is(TokenKind::Identifier));
         llvm::StringRef name = P.peekToken().getData();
         SrcSpan start_span = P.peekToken().getSpan();
 
         Expr* base;
-        if (P.nextToken().isNot(TokenType::LParen)) {
+        if (P.nextToken().isNot(TokenKind::LParen)) {
             base = Alloc.Create<DeclRefExpr>(start_span, name);
-        } else 
-            base = parseCallExpr(name, start_span.getStart()); 
+        } else
+            base = parseCallExpr(name, start_span.getStart());
 
-        if (P.peekToken().is(TokenType::Dot)) {
-            if (P.nextToken().isNot(TokenType::Identifier)) {
+        if (P.peekToken().is(TokenKind::Dot)) {
+            if (P.nextToken().isNot(TokenKind::Identifier)) {
                 llvm::outs() << "Expected identifier.\n";
                 return nullptr;
             }
@@ -358,10 +357,10 @@ public:
 
             (void)P.nextToken();
             return Alloc.Create<AccessExpr>(span, base, field_name);
-        } else if (P.peekToken().is(TokenType::LBrack)) {
+        } else if (P.peekToken().is(TokenKind::LSquare)) {
             (void)P.nextToken();
             Expr* start = parseIntegerLiteral();
-            if (P.peekToken().isNot(TokenType::RBrack)) {
+            if (P.peekToken().isNot(TokenKind::RSquare)) {
                 llvm::outs() << "Expected closing ']'\n";
                 return nullptr;
             }
@@ -391,21 +390,21 @@ public:
             default:
                 llvm::outs() << "Only variable, type, struct, impl and function declarations"
                                 " are allowed in the global namespace.\n";
-                llvm::outs() << "Currently: " << strTokenType(P.peekToken().getType()) << "\n"; 
+                llvm::outs() << "Currently: " << lex::strTokenKind(P.peekToken().getType()) << "\n";
                 return nullptr;
 
-            case TokenType::Type:
+            case TokenKind::Type:
                 return parseTypeAiasDecl();
 
-            case TokenType::Const:
-            case TokenType::Let:
-            case TokenType::Mut:
+            case TokenKind::Const:
+            case TokenKind::Let:
+            case TokenKind::Mut:
                 return parseVarDecl();
-            
-            case TokenType::Struct:
+
+            case TokenKind::Struct:
                 return parseStructDecl();
-            
-            case TokenType::Fn:
+
+            case TokenKind::Fn:
                 return parseFunctionDecl();
         }
     }
@@ -413,23 +412,23 @@ public:
     Stmt* parseStmt() {
         DEBUG("Called: parseStmt");
         switch (P.peekToken().getType()) {
-            case TokenType::Type: {
+            case TokenKind::Type: {
                 ast::TypeAliasDecl* DC = parseTypeAiasDecl();
                 return Alloc.Create<DeclStmt>(DC);
             }
 
-            case TokenType::Const:
-            case TokenType::Let:
-            case TokenType::Mut: {
+            case TokenKind::Const:
+            case TokenKind::Let:
+            case TokenKind::Mut: {
                 ast::VarDecl* DC = parseVarDecl();
                 return Alloc.Create<DeclStmt>(DC);
             }
 
-            case TokenType::If:
+            case TokenKind::If:
                 return parseIfStmt();
-            case TokenType::While:
+            case TokenKind::While:
                 return parseWhileStmt();
-            case TokenType::Return:
+            case TokenKind::Ret:
                 return parseReturnStmt();
 
             default:
@@ -444,15 +443,15 @@ public:
 
     TypeInfo* parseTypeRef() {
         DEBUG("Called: parseTypeRef");
-        if (P.peekToken().is(TokenType::LBrack)) {
+        if (P.peekToken().is(TokenKind::LSquare)) {
             SrcLoc start = P.peekToken().getStartLoc();
 
             (void)P.nextToken();
             TypeInfo* pointee = parseTypeRef();
 
             size_t size = 0;
-            if (P.peekToken().is(TokenType::Colon)) {
-                if (P.nextToken().isNot(TokenType::Int)) {
+            if (P.peekToken().is(TokenKind::Colon)) {
+                if (P.nextToken().isNot(TokenKind::Integer)) {
                     llvm::outs() << "Expected an integer literal for the size of the array.\n";
                     return nullptr;
                 }
@@ -461,21 +460,21 @@ public:
                     // Indicates an error probably in the lexer with how integer literals are
                     // matched or with how the tokens are constructed.
                     llvm_unreachable("'Data' for integer literal token was not an integer literal.");
-                
-                if (P.nextToken().isNot(TokenType::RBrack)) {
+
+                if (P.nextToken().isNot(TokenKind::RSquare)) {
                     llvm::outs() << "Expected ']' to close the array type.\n";
                     return nullptr;
                 }
-            } else if (!P.peekToken().is(TokenType::RBrack)) {
+            } else if (!P.peekToken().is(TokenKind::RSquare)) {
                 llvm::outs() << "Invalid array type, expected ':' or ']'.\n";
                 return nullptr;
             }
-            
+
             SrcSpan span(start, P.peekToken().getEndLoc());
 
             (void)P.nextToken();
             return Alloc.Create<TypeInfo>(TypeInfo::CreateArray(span, pointee, size));
-        } else if (P.peekToken().isNot(TokenType::Identifier)) {
+        } else if (P.peekToken().isNot(TokenKind::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
             return nullptr;
         }
@@ -485,18 +484,18 @@ public:
         ));
 
         (void)P.nextToken();
-        if (P.peekToken().is(TokenType::Star) ||
-            P.peekToken().is(TokenType::Ampersand)) {
+        if (P.peekToken().is(TokenKind::Star) ||
+            P.peekToken().is(TokenKind::Ampersand)) {
             SrcLoc start = result->getStartLoc();
             do {
                 result = Alloc.Create<TypeInfo>(TypeInfo::CreatePointer(
                     SrcSpan(start, P.peekToken().getEndLoc()),
-                    P.peekToken().is(TokenType::Star) ? true : false,
+                    P.peekToken().is(TokenKind::Star) ? true : false,
                     result
                 ));
                 (void)P.nextToken();
-            } while (P.peekToken().is(TokenType::Star) ||
-                     P.peekToken().is(TokenType::Ampersand));
+            } while (P.peekToken().is(TokenKind::Star) ||
+                     P.peekToken().is(TokenKind::Ampersand));
         }
 
         return result;
@@ -505,13 +504,13 @@ public:
     TypeAliasDecl* parseTypeAiasDecl() {
         DEBUG("Called: parseTypeAliasDecl");
         SrcLoc start = P.peekToken().getStartLoc();
-        if (P.nextToken().isNot(TokenType::Identifier)) {
+        if (P.nextToken().isNot(TokenKind::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
             return nullptr;
         }
         llvm::StringRef name = P.peekToken().getData();
 
-        if (P.nextToken().isNot(TokenType::Equal)) {
+        if (P.nextToken().isNot(TokenKind::Equal)) {
             llvm::outs() << "Expected '='.\n";
             return nullptr;
         }
@@ -519,7 +518,7 @@ public:
         (void)P.nextToken();
         TypeInfo* type = parseTypeRef();
         if (!type) return nullptr;
-        
+
         (void)P.nextToken();
         SrcSpan span(start, type->getEndLoc());
         return Alloc.Create<TypeAliasDecl>(span, name, type);
@@ -527,8 +526,8 @@ public:
 
     bool parseInitDecl(SrcLoc& end, llvm::StringRef& name, TypeInfo*& info, Expr*& init) {
         DEBUG("Called: parseInitDecl");
-        if (P.peekToken().isNot(TokenType::Identifier)) {
-            llvm::outs() << "Expected identifier, got '" << strTokenType(P.peekToken().getType()) <<"'.\n";
+        if (P.peekToken().isNot(TokenKind::Identifier)) {
+            llvm::outs() << "Expected identifier, got '" << lex::strTokenKind(P.peekToken().getType()) <<"'.\n";
             return true;
         }
         name = P.peekToken().getData();
@@ -536,19 +535,19 @@ public:
         // Only used for the else case to create an SrcLoc for the implicit type.
         size_t colon_offset = P.peekToken().getEndLoc().getOffset() + 1;
 
-        if (P.nextToken().is(TokenType::Colon)) {
+        if (P.nextToken().is(TokenKind::Colon)) {
             (void)P.nextToken();
             info = parseTypeRef();
             if (!info) return true;
-        } else if (!P.peekToken().is(TokenType::Equal)) {
+        } else if (!P.peekToken().is(TokenKind::Equal)) {
             llvm::outs() << "Expected ':' or '='.\n";
             return true;
-        } else 
+        } else
             info = Alloc.Create<TypeInfo>(TypeInfo::CreateImplicit(
                 SrcLoc(P.peekToken().getSpan().getID(), colon_offset)
             ));
 
-        if (P.peekToken().is(TokenType::Equal)) {
+        if (P.peekToken().is(TokenKind::Equal)) {
             (void)P.nextToken();
             init = parseExpr();
             end = init->getEndLoc();
@@ -562,13 +561,13 @@ public:
     VarDecl* parseVarDecl() {
         DEBUG("Called: parseVarDecl");
         VarDecl::Mutability mutability;
-        if (P.peekToken().is(TokenType::Const)) {
+        if (P.peekToken().is(TokenKind::Const)) {
             mutability = VarDecl::Constant;
-        } else if (P.peekToken().is(TokenType::Let)) {
+        } else if (P.peekToken().is(TokenKind::Let)) {
             mutability = VarDecl::Immutable;
-        } else if (P.peekToken().is(TokenType::Mut)) {
+        } else if (P.peekToken().is(TokenKind::Mut)) {
             mutability = VarDecl::Mutable;
-        } else 
+        } else
             llvm_unreachable("Invalid Mutability for VarDecl");
 
         SrcLoc start = P.peekToken().getStartLoc();
@@ -612,7 +611,7 @@ public:
         Expr* init = nullptr;
         if (parseInitDecl(end, name, info, init))
             return nullptr;
-        
+
         return Alloc.Create<FieldDecl>(
             SrcSpan(start, end), name, fieldIndex, info, init
         );
@@ -621,13 +620,13 @@ public:
     StructDecl* parseStructDecl() {
         DEBUG("Called: parseStructDecl");
         SrcLoc start = P.peekToken().getStartLoc();
-        if (P.nextToken().isNot(TokenType::Identifier)) {
+        if (P.nextToken().isNot(TokenKind::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
             return nullptr;
         }
         llvm::StringRef name = P.peekToken().getData();
 
-        if (P.nextToken().isNot(TokenType::Colon)) {
+        if (P.nextToken().isNot(TokenKind::Colon)) {
             llvm::outs() << "Expected ':'.\n";
             return nullptr;
         }
@@ -636,8 +635,8 @@ public:
         StructDecl* result = Alloc.Create<StructDecl>(name);
         llvm::SmallVector<FieldDecl*> fields;
         // while (P.nextToken().isNot(TokenType::End)) {
-        while (P.peekToken().isNot(TokenType::End)) {
-            if (P.peekToken().is(TokenType::Eof)) {
+        while (P.peekToken().isNot(TokenKind::End)) {
+            if (P.peekToken().is(TokenKind::Eof)) {
                 llvm::outs() << "Unclosed struct declaration. Expected 'end'.\n";
                 return nullptr;
             }
@@ -659,22 +658,22 @@ public:
     FunctionDecl* parseFunctionDecl() {
         DEBUG("Called: parseFunctionDecl");
         SrcLoc start = P.peekToken().getStartLoc();
-        if (P.nextToken().isNot(TokenType::Identifier)) {
+        if (P.nextToken().isNot(TokenKind::Identifier)) {
             llvm::outs() << "Expected identifier.\n";
             return nullptr;
         }
         llvm::StringRef name = P.peekToken().getData();
-        
-        if (P.nextToken().isNot(TokenType::LParen)) {
+
+        if (P.nextToken().isNot(TokenKind::LParen)) {
             llvm::outs() << "Expected '('.\n";
             return nullptr;
         }
 
         FunctionDecl* result = Alloc.Create<FunctionDecl>(name);
         llvm::SmallVector<ParamDecl*> parameters;
-        if (P.nextToken().isNot(TokenType::RParen))
+        if (P.nextToken().isNot(TokenKind::RParen))
             while (true) {
-                if (P.peekToken().is(TokenType::Eof)) {
+                if (P.peekToken().is(TokenKind::Eof)) {
                     llvm::outs() << "Unclosed function declaration. Expected ')'.\n";
                     return nullptr;
                 }
@@ -685,13 +684,13 @@ public:
                 parameters.push_back(next);
                 result->pushDecl(next);
 
-                if (P.peekToken().is(TokenType::RParen)) {
+                if (P.peekToken().is(TokenKind::RParen)) {
                     break;
-                } else if (P.peekToken().is(TokenType::Comma)) 
-                    if (P.nextToken().is(TokenType::RParen)) {
+                } else if (P.peekToken().is(TokenKind::Comma))
+                    if (P.nextToken().is(TokenKind::RParen)) {
                         llvm::outs() << "Unnessesary ',' after the last parameter in a function declaration.\n";
                         return nullptr;
-                    }                
+                    }
             }
 
         // Ends the function declaration at the closing ")" in case
@@ -699,7 +698,7 @@ public:
         SrcLoc end = P.peekToken().getEndLoc();
 
         result->setParams(parameters);
-        if (P.nextToken().is(TokenType::Arrow)) {
+        if (P.nextToken().is(TokenKind::Arrow)) {
             (void)P.nextToken();
             TypeInfo* type = parseTypeRef();
             if (!type) return nullptr;
@@ -710,7 +709,7 @@ public:
 
         result->setSpan(SrcSpan(start, end));
 
-        if (P.peekToken().is(TokenType::Colon)) {
+        if (P.peekToken().is(TokenKind::Colon)) {
             BlockStmt* body = parseBlockStmt();
             if (!body) return nullptr;
 
@@ -722,21 +721,21 @@ public:
 
     BlockStmt* parseBlockStmt() {
         DEBUG("Called: parseBlockStmt");
-        assert(P.peekToken().is(TokenType::Colon));
+        assert(P.peekToken().is(TokenKind::Colon));
 
         SrcLoc start = P.peekToken().getStartLoc();
 
         (void)P.nextToken();
         llvm::SmallVector<Stmt*> stmts;
-        while (P.peekToken().isNot(TokenType::End)) {
+        while (P.peekToken().isNot(TokenKind::End)) {
             // FIXME: I don't like this setup, but it works for now...
-            if (P.peekToken().is(TokenType::Elif) || 
-                P.peekToken().is(TokenType::Else)) {
+            if (P.peekToken().is(TokenKind::Elif) ||
+                P.peekToken().is(TokenKind::Else)) {
                 SrcSpan span(start, P.peekToken().getEndLoc());
                 return Alloc.Create<BlockStmt>(span, stmts);
             }
 
-            if (P.peekToken().is(TokenType::Eof)) {
+            if (P.peekToken().is(TokenKind::Eof)) {
                 llvm::outs() << "Unclosed ':'.\n";
                 return nullptr;
             }
@@ -755,7 +754,7 @@ public:
 
     Stmt* parseStmtBody() {
         DEBUG("Called: parseStmtBody");
-        if (P.peekToken().is(TokenType::Colon))
+        if (P.peekToken().is(TokenKind::Colon))
             return parseBlockStmt();
         // FIXME: Should also look for an Expr as well
         return parseStmt();
@@ -775,10 +774,10 @@ public:
         if (!body) return nullptr;
 
         Stmt* elseif = nullptr;
-        if (P.peekToken().is(TokenType::Elif)) {
+        if (P.peekToken().is(TokenKind::Elif)) {
             elseif = parseIfStmt();
             if (!elseif) return nullptr;
-        } else if (P.peekToken().is(TokenType::Else)) {
+        } else if (P.peekToken().is(TokenKind::Else)) {
             (void)P.nextToken(); // Skip over the leading Else token
             elseif = parseStmtBody();
             if (!elseif) return nullptr;
@@ -812,7 +811,7 @@ public:
         (void)P.nextToken(); // Skip the leading Return token
         // FIXME: Probably find a better way of doing this.
         Expr* value = nullptr;
-        if (!P.peekToken().isKeyword() && !P.peekToken().is(TokenType::Self)) {
+        if (!P.peekToken().isKeyword() && !P.peekToken().is(TokenKind::Self)) {
             value = parseExpr();
             end = value->getEndLoc();
         }
@@ -824,16 +823,16 @@ public:
 namespace c {
 
 const Token& Parser::nextToken() {
-    CurrentToken = LexerSource.next();
+    CurrentToken = LexerSource.lex();
     DEBUG(std::string("Called: nextToken:")
-          + " Kind: " + strTokenType(CurrentToken.getType()).str() 
+          + " Kind: " + lex::strTokenKind(CurrentToken.getType()).str()
           + " Data: " + CurrentToken.getData().str());
     return CurrentToken;
 }
 
 bool Parser::parse(ModuleDecl& result) {
     DEBUG("Called: parse");
-    if (peekToken().is(TokenType::Eof))
+    if (peekToken().is(TokenKind::Eof))
         return true;
 
     PrattParser pratt(*this, Alloc);
@@ -844,7 +843,7 @@ bool Parser::parse(ModuleDecl& result) {
         if (!next) return true;
 
         result.pushDecl(next);
-    } while (!peekToken().is(TokenType::Eof));
+    } while (!peekToken().is(TokenKind::Eof));
     return false;
 }
 
