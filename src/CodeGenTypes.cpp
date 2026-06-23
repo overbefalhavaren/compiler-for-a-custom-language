@@ -18,20 +18,21 @@ llvm::Type* CodeGenTypes::convertType(const Type* type) {
         return getBuiltinType(bt);
 
     if (auto pt = llvm::dyn_cast<PointerType>(type))
-        return llvm::PointerType::get(
-            convertType(pt->getPointee()), 0
-        );
+        llvm_unreachable("Pointer types are currently not supported.");
+        // return llvm::PointerType::get(
+        //     convertType(pt->getPointee()), 0
+        // );
 
     if (auto at = llvm::dyn_cast<ArrayType>(type))
         return createArrayType(at);
-    
+
     if (auto st = llvm::dyn_cast<StructType>(type)) {
         llvm::StructType* result = Structs.lookup(st);
         if (result == nullptr)
             result = createStructType(st);
         return result;
     }
-    
+
     // This point should never be reached.
     llvm_unreachable("Type subclass missing case.");
 }
@@ -43,7 +44,7 @@ llvm::Type* CodeGenTypes::getBuiltinType(const BuiltinType* type) {
             llvm_unreachable("BuitingKind enum value missing a case.");
         case BuiltinType::Bool:
             return llvm::Type::getInt1Ty(getLLVMContext());
-        
+
         case BuiltinType::I8:
         case BuiltinType::U8:
             return llvm::Type::getInt8Ty(getLLVMContext());
@@ -56,7 +57,7 @@ llvm::Type* CodeGenTypes::getBuiltinType(const BuiltinType* type) {
         case BuiltinType::I64:
         case BuiltinType::U64:
             return llvm::Type::getInt64Ty(getLLVMContext());
-        
+
         case BuiltinType::F32:
             return llvm::Type::getFloatTy(getLLVMContext());
         case BuiltinType::F64:
@@ -78,7 +79,7 @@ llvm::StructType* CodeGenTypes::createStructType(const StructType* type) {
     llvm::SmallVector<llvm::Type*> fields;
     for (ast::FieldDecl* field : type->getDecl()->fields())
         fields.push_back(convertType(field->getType()));
-    
+
     st->setBody(std::move(fields));
     return st;
 }

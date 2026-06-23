@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cassert>
-#include <type_traits>
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Allocator.h"

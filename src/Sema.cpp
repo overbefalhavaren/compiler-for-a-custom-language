@@ -4,7 +4,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#include "include/Lexer/utils.hpp"
+#include "include/Lex/Token.hpp"
 
 #include "src/Debug.hpp"
 
@@ -25,9 +25,9 @@ void printScopeStackDecls(Scope* scope) {
         llvm_unreachable("");
     llvm::outs() << "\n";
 
-    for (auto DC : scope->decls()) 
+    for (auto DC : scope->decls())
         llvm::outs() << DC->getDeclKindName() << " " << DC->getName() << "\n";
-    
+
     if (scope->hasParent())
         printScopeStackDecls(scope->getParent());
 }
@@ -97,16 +97,16 @@ Scope* Lookup::getStartScope() const {
         case Type:
             if (LookupScope->isFunctionScope())
                 // TODO: Remove the note when templates are implemented.
-                // NOTE: Functions currently can't have templates. 
-                // Get  the prototype of the function instead of the functions 
-                // parent scope because the function can have a template. 
+                // NOTE: Functions currently can't have templates.
+                // Get  the prototype of the function instead of the functions
+                // parent scope because the function can have a template.
                 return LookupScope->getFnPrototype();
             return LookupScope;
     }
 }
 
 // This language is too stupid to understand you can just use llvm::isa.
-// So here I am implementing my own wrapper function around llvm::isa... 
+// So here I am implementing my own wrapper function around llvm::isa...
 // I love my life...
 template <typename T>
 bool isaWrapper(ast::Decl* DC) {
@@ -159,7 +159,7 @@ bool Sema::validateTypeCast(const Type* from, const Type* to, bool isExplicit) {
 
         auto to_bt = llvm::cast<BuiltinType>(to);
         if (from->isPointerTy()) {
-            // TODO: Give a warning that information may be lost if "to" 
+            // TODO: Give a warning that information may be lost if "to"
             // has less bytes than the builtin pointer type.
             return false;
         } else if (!from->isBuiltinTy())
@@ -200,7 +200,7 @@ bool Sema::validateTypeCast(const Type* from, const Type* to, bool isExplicit) {
         auto from_arr = llvm::cast<ArrayType>(from);
         if (to_arr->getInitSize() < from_arr->getInitSize())
             return true;
-        
+
         return validateTypeCast(
             from_arr->getElemType(), to_arr->getElemType(), isExplicit
         );
@@ -232,11 +232,11 @@ bool Sema::analyzeDecl(Decl* DC, Scope* scope) {
         case Decl::StructDeclKind:
             return analyzeStructDecl(llvm::cast<StructDecl>(DC), scope);
 
-        // Don't need cases for ParamDecl and FieldDecl since those are 
+        // Don't need cases for ParamDecl and FieldDecl since those are
         // handled in analyzeStructDecl() and analyzeFunctionDecl().
         case Decl::VarDeclKind:
             return analyzeInitDecl(llvm::cast<InitDecl>(DC), scope, true);
-        
+
         case Decl::FunctionDeclKind:
             return analyzeFuncionDecl(llvm::cast<FunctionDecl>(DC), scope);
 
@@ -266,7 +266,7 @@ bool Sema::analyzeStmt(Stmt* ST, Scope* scope) {
             return analyzeIfStmt(llvm::cast<IfStmt>(ST), scope);
         case Stmt::WhileStmtKind:
             return analyzeWhileStmt(llvm::cast<WhileStmt>(ST), scope);
-            
+
         case Stmt::ReturnStmtKind:
             return analyzeReturnStmt(llvm::cast<ReturnStmt>(ST), scope);
 
@@ -298,7 +298,7 @@ bool Sema::analyzeExpr(Expr* EX, Scope* scope, bool allowAssign) {
             if (unaryop->isAssignOp()) {
                 if (!allowAssign)
                     goto assignment_disallowed_error;
-                
+
                 return analyzeUnaryAssign(unaryop, scope);
             } else if (unaryop->isDerefOp())
                 return analyzeDereference(unaryop, scope);
@@ -313,11 +313,11 @@ bool Sema::analyzeExpr(Expr* EX, Scope* scope, bool allowAssign) {
             return analyzeDeclRef(llvm::cast<DeclRefExpr>(EX), scope);
         case Stmt::AccessExprKind:
             return analyzeAccessExpr(llvm::cast<AccessExpr>(EX), scope);
-        
+
         // Expressions that are lvalues
         case Stmt::SliceExprKind:
             return analyzeSliceExpr(llvm::cast<SliceExpr>(EX), scope);
-        
+
         // Expressions that are rvalues
         case Stmt::CallExprKind:
             return analyzeCallExpr(llvm::cast<CallExpr>(EX), scope);
@@ -350,7 +350,7 @@ bool Sema::resolveTypeInfo(TypeInfo* info, Scope* scope) {
     if (info->isPointerTy()) {
         if (resolveTypeInfo(info->getPointee(), scope))
             return true;
-        
+
         info->setType(Alloc.Create<PointerType>(
             info->isRawPointerTy(), info->getPointee()->getType()
         ));
@@ -364,10 +364,10 @@ bool Sema::resolveTypeInfo(TypeInfo* info, Scope* scope) {
         ));
         return false;
     }
-    
+
     assert(info->isNamedTy() && "Unnamed type missing condition.");
 
-    auto builtins = lexer::getBuiltinMap();
+    auto builtins = lex::getBuiltinMap();
     auto builtin_result = builtins.find(info->getName());
     if (builtin_result != builtins.end()) {
         info->setType(Alloc.getBuiltinType(builtin_result->second));
@@ -403,8 +403,8 @@ bool Sema::analyzeModuleDecl(ModuleDecl* DC, Scope* scope) {
 bool Sema::analyzeInitDecl(InitDecl* DC, Scope* scope, bool isVarDecl) {
     DEBUG("Called: analyzeInitDecl");
     // LookupKind::Value also looks for FunctionDecl but that's fine since
-    // function declarations within function bodies is not allowed. We do 
-    // not use Lookup::getKind() here since we want to look for both 
+    // function declarations within function bodies is not allowed. We do
+    // not use Lookup::getKind() here since we want to look for both
     // VarDecl and ParamVarDecl.
 
     if (lookup(scope, DC->getName(), true, Lookup::Value).find()) {
@@ -442,7 +442,7 @@ bool Sema::analyzeInitDecl(InitDecl* DC, Scope* scope, bool isVarDecl) {
         }
 
         // FIXME: Maybe check if the init is a CallExpr and validate that it isn't void
-        
+
         DC->getTypeInfo()->setType(DC->getInit()->getType());
         return false;
     } else if (resolveTypeInfo(DC->getTypeInfo(), scope))
@@ -470,7 +470,7 @@ bool Sema::analyzeFuncionDecl(FunctionDecl* DC, Scope* scope) {
 
     // Push DC at the start. Functions can be called recursively.
     scope->pushDecl(DC);
-    
+
     Scope proto(scope, Scope::FnPrototypeScope);
     proto.setFnPrototype(&proto);
     // proto.setEntity(DC);
@@ -484,7 +484,7 @@ bool Sema::analyzeFuncionDecl(FunctionDecl* DC, Scope* scope) {
 
     if (!DC->isVoid() && resolveTypeInfo(DC->getTypeInfo(), &proto))
         return true;
-        
+
     CurrentFunction = DC;
     if (analyzeBlockStmt(DC->getBody(), &proto))
         return true;
@@ -494,7 +494,7 @@ bool Sema::analyzeFuncionDecl(FunctionDecl* DC, Scope* scope) {
 
 bool Sema::validateTypeDefName(llvm::StringRef name, Scope* scope) {
     DEBUG("Called: validateTypeDefName");
-    auto builtins = lexer::getBuiltinMap();
+    auto builtins = lex::getBuiltinMap();
     if (builtins.find(name) != builtins.end()) {
         llvm::outs() << "Type declration name conflicts with builtin type.\n";
         return true;
@@ -554,8 +554,8 @@ bool Sema::analyzeStructDecl(StructDecl* DC, Scope* scope) {
 
 bool Sema::analyzeBlockStmt(BlockStmt* ST, Scope* scope) {
     DEBUG("Called: analyzeBlockStmt");
-    // BlockStmt can only be within the scope of a function. There's currently 
-    // also no flags for different scopes within a function body so therefore 
+    // BlockStmt can only be within the scope of a function. There's currently
+    // also no flags for different scopes within a function body so therefore
     // we just hardcode the flag to be FunctionScope.
     assert(scope->getFnPrototype() != nullptr);
     Scope body(scope, Scope::FunctionScope);
@@ -586,7 +586,7 @@ bool Sema::analyzeReturnStmt(ReturnStmt* ST, Scope* scope) {
     if (ST->isVoid()) {
         if (CurrentFunction->isVoid())
             return false;
-        
+
         llvm::outs() << "Can't have a void return in a non void function.\n";
         return true;
     } else if (CurrentFunction->isVoid()) {
@@ -601,14 +601,14 @@ bool Sema::analyzeReturnStmt(ReturnStmt* ST, Scope* scope) {
         llvm::outs() << "Type of returned value could not be converted to the functions return type.\n";
         return true;
     }
-    
+
     return false;
 }
 
 bool Sema::analyzeConditionalStmtBody(Stmt* body, Scope* scope) {
     DEBUG("Called: analyzeConditionalStmtBody");
     // TODO: Add checks to check that the body acually does somthing.
-    // i.e isn't just somthing like a variable declarations that'll 
+    // i.e isn't just somthing like a variable declarations that'll
     // just immediatly get destroyed.
 
     if (auto EX = llvm::dyn_cast<Expr>(body)) {
@@ -639,7 +639,7 @@ bool Sema::analyzeIfStmt(IfStmt* ST, Scope* scope) {
 
         if (!current->hasElse())
             break;
-        
+
         auto next = llvm::dyn_cast<IfStmt>(current->getElse());
         if (next == nullptr) {
             if (analyzeConditionalStmtBody(current->getElse(), &if_scope))
@@ -672,7 +672,7 @@ bool Sema::analyzeCondition(Expr* EX, Scope* scope) {
     // Assigning is not allowed inside of conditions
     if (analyzeExpr(EX, scope, false))
         return true;
-    
+
     // Can only be false for arithmetic and non-binary expressions
     if (validateTypeCast(EX->getType(), Alloc.getBuiltinType(BuiltinType::Bool), false)) {
         llvm::outs() << "Invalid type conversion to bool inside condition.\n";
@@ -718,7 +718,7 @@ bool Sema::analyzeBinaryAssign(BinaryOperator* EX, Scope* scope) {
 
     if (analyzeExpr(EX->getLHS(), scope, false))
         return true;
-    
+
     // We allow assignment here to allow expressions like "a = b = c"
     if (analyzeExpr(EX->getRHS(), scope, true))
         return true;
@@ -754,7 +754,7 @@ bool Sema::analyzeBinaryOperator(BinaryOperator* EX, Scope* scope) {
 
     // FIXME: Take the type with the most (i think) bytes instead
     EX->getRHS()->setType(EX->getLHS()->getType());
- 
+
     if (EX->isComparisonOp()) {
         EX->setType(Alloc.getBooleanType());
     } else { // Arithmetic operator
@@ -801,7 +801,7 @@ bool Sema::analyzeUnaryAssign(UnaryOperator* EX, Scope* scope) {
         llvm::outs() << "Memory location is not assignable.\n";
         return true;
     }
-    
+
     EX->setType(EX->getSubExpr()->getType());
 
     // TODO: This will have to be changed when operator methods are implemented.
@@ -867,7 +867,7 @@ bool Sema::analyzeDeclRef(DeclRefExpr* EX, Scope* scope) {
 
     if (auto DC = llvm::dyn_cast<InitDecl>(result)) {
         EX->setType(DC->getType());
-    } else 
+    } else
         // TODO: Change when function pointers are implemented
         llvm_unreachable("Function pointers are currently not supported in Sema");
 
@@ -940,12 +940,12 @@ bool Sema::analyzeCallExpr(CallExpr* EX, Scope* scope) {
         llvm::outs() << "No function or struct called '" << EX->getCallee() << "' was found.\n";
         return true;
     }
-    
+
     for (size_t i = 0; i < params.size(); i++) {
         if (i < EX->getAmntArgs()) {
             Expr* arg = EX->getArg(i);
-            // TODO: Condiser adding logic to create a Scope with a flag for 
-            // conditions and calls since both disallow assignment, this to 
+            // TODO: Condiser adding logic to create a Scope with a flag for
+            // conditions and calls since both disallow assignment, this to
             // differentiate them in error messages.
             if (analyzeExpr(arg, scope, false))
                 return true;
@@ -981,7 +981,7 @@ bool ArrayItemIsConstant(const Expr* EX) {
                 return false;
     } else if (!EX->isLiteralExpr())
         return false;
-    
+
     return true;
 }
 
@@ -998,7 +998,7 @@ bool Sema::analyzeArrayLiteral(ArrayLiteral* EX, Scope* scope) {
             llvm::outs() << "All items in the array must be of the same type.\n";
             return true;
         }
-        
+
         it->setType(ty);
         if (all_constant)
             all_constant = ArrayItemIsConstant(it);

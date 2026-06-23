@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <type_traits>
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MemoryBuffer.h"
