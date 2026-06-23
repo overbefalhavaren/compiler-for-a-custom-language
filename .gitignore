@@ -1,0 +1,10 @@
+.vscode/
+deprecated/
+build/
+bin/
+lib/
+
+*.exe
+*.ll
+
+CompileMe.txt

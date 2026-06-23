@@ -1,0 +1,14 @@
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/*.cpp
+)
+
+add_library(compiler_lib STATIC ${SOURCES})
+
+target_include_directories(compiler_lib PUBLIC
+    ${CMAKE_SOURCE_DIR}
+)
+
+target_compile_features(compiler_lib PUBLIC cxx_std_23)
+
+llvm_map_components_to_libnames(llvm_libs core)
+target_link_libraries(compiler_lib PUBLIC ${llvm_libs})
